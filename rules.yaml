@@ -1,7 +1,10 @@
 sites:
   - domain: iltalehti.fi
-    template: "https://iltalehti.fi/uutiset/a/{{.ArticleID}}"
+    template: "https://iltalehti.fi/{{.Section}}/a/{{.ArticleID}}"
     extraction:
-      field: "ArticleID"
-      path_pattern: "^/[^/]+/a/([^/]+)"
+      path_pattern: "^/(?P<Section>[^/]+)/a/(?P<ArticleID>[0-9a-fA-F-]+)"
       query_param: "article"
+
+    tests:
+      - url: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
+        expected: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
