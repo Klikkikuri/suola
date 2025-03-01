@@ -1,0 +1,20 @@
+{
+	"name": "Suola 🧂",
+    "build": {
+        "context": "..",
+        "dockerfile": "../Dockerfile",
+        "target": "devcontainer"
+    },
+    "workspaceFolder": "/app",
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+        "source=${localWorkspaceFolder},target=/app,type=bind"
+    ],
+	"customizations": {
+		"vscode": {
+            "settings": {
+                "go.useLanguageServer": true
+            }
+        }
+    }
+}

@@ -1,0 +1,7 @@
+sites:
+  - domain: iltalehti.fi
+    template: "https://iltalehti.fi/uutiset/a/{{.ArticleID}}"
+    extraction:
+      field: "ArticleID"
+      path_pattern: "^/[^/]+/a/([^/]+)"
+      query_param: "article"
