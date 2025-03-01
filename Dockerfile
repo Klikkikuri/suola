@@ -25,3 +25,6 @@ FROM mcr.microsoft.com/devcontainers/go:1-1.23-bookworm as devcontainer
 WORKDIR /app
 
 COPY . .
+
+# To be considered; Should we add the rules.yaml file a remote repo?
+# ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml

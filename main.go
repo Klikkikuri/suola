@@ -184,7 +184,7 @@ func generateSignature(input string) string {
 func main() {
 	configPath := flag.String("config", "rules.yaml", "Path to YAML configuration file")
 	urlInput := flag.String("url", "", "URL to process")
-	hashFlag := flag.Bool("hash", false, "Generate SHA-256 hash of the final URL")
+	signFlag := flag.Bool("sign", false, "Generate signature of the final URL")
 	flag.Parse()
 
 	if *urlInput == "" {
@@ -203,7 +203,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Formatted URL:", formattedURL)
-	if *hashFlag {
-		fmt.Println("SHA-512 Hash:", generateSignature(formattedURL))
+	if *signFlag {
+		fmt.Println("Signature:", generateSignature(formattedURL))
 	}
 }
