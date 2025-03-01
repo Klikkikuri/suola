@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -26,8 +28,9 @@ type TemplateRule struct {
 }
 
 type RuleTestCase struct {
-	Url      string `yaml:"url"`
-	Expected string `yaml:"expected"`
+	Url       string `yaml:"url"`
+	Expected  string `yaml:"expected"`
+	Signature string `yaml:"signature"`
 }
 
 // SiteRule holds all extraction templates for a site
@@ -172,9 +175,16 @@ func processURL(cfg *Config, inputURL string) (string, error) {
 	return "", fmt.Errorf("no matching rule found for host %s", host)
 }
 
+// Generate SHA-256 hash of the given string
+func generateSignature(input string) string {
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])
+}
+
 func main() {
 	configPath := flag.String("config", "rules.yaml", "Path to YAML configuration file")
 	urlInput := flag.String("url", "", "URL to process")
+	hashFlag := flag.Bool("hash", false, "Generate SHA-256 hash of the final URL")
 	flag.Parse()
 
 	if *urlInput == "" {
@@ -193,4 +203,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Formatted URL:", formattedURL)
+	if *hashFlag {
+		fmt.Println("SHA-512 Hash:", generateSignature(formattedURL))
+	}
 }

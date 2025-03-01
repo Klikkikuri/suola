@@ -9,3 +9,5 @@ sites:
     tests:
       - url: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
         expected: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
+        sign: 7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c
+

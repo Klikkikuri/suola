@@ -18,13 +18,23 @@ func TestExtractionRules(t *testing.T) {
 	for _, site := range config.Sites {
 		for _, test := range site.Tests {
 			t.Run(fmt.Sprintf("%s/%s", site.Domain, test.Url), func(t *testing.T) {
-				resUrl, nil := processURL(config, test.Url)
-				if err != nil {
-					t.Fatalf("Failed to process URL: %v", err)
-				}
+				var hashed = ""
 
-				if resUrl != test.Expected {
-					t.Fatalf("Expected %v, got %v", test.Expected, resUrl)
+				resUrl, nil := processURL(config, test.Url)
+
+				if test.Signature != "" {
+					hashed = generateSignature(resUrl)
+				}
+				if err != nil || resUrl != test.Expected {
+					t.Fatalf("❌ Test failed for: %s\nExpected: %s\nGot: %s\nError: %v\n\n",
+						test.Url, test.Expected, resUrl, err)
+				} else {
+					if hashed != "" && hashed != test.Signature {
+						t.Fatalf("❌ Signature mismatch for: %s\nExpected: %s\nGot: %s\n\n",
+							test.Url, test.Signature, hashed)
+					} else {
+						t.Logf("✅ Test passed for: %s\n", test.Url)
+					}
 				}
 			})
 		}
