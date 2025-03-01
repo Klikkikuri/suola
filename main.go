@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -30,7 +31,7 @@ type TemplateRule struct {
 type RuleTestCase struct {
 	Url       string `yaml:"url"`
 	Expected  string `yaml:"expected"`
-	Signature string `yaml:"signature"`
+	Signature string `yaml:"signature,omitempty"`
 }
 
 // SiteRule holds all extraction templates for a site
@@ -43,6 +44,9 @@ type SiteRule struct {
 type Config struct {
 	Sites []SiteRule `yaml:"sites"`
 }
+
+//go:embed rules.yaml
+var cfgData []byte
 
 // Read config from file
 func mustReadConfig(path string) []byte {
@@ -182,7 +186,7 @@ func generateSignature(input string) string {
 }
 
 func main() {
-	configPath := flag.String("config", "rules.yaml", "Path to YAML configuration file")
+	configPath := flag.String("config", "", "Path to YAML configuration file")
 	urlInput := flag.String("url", "", "URL to process")
 	signFlag := flag.Bool("sign", false, "Generate signature of the final URL")
 	flag.Parse()
@@ -190,11 +194,15 @@ func main() {
 	if *urlInput == "" {
 		log.Fatal("URL input is required")
 	}
-
-	cfgData := mustReadConfig(*configPath)
+	if configPath != nil && *configPath != "" {
+		cfgData = mustReadConfig(*configPath)
+		log.Printf("Loaded config from %s", *configPath)
+	}
 	cfg, err := loadConfig(cfgData)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	} else {
+		log.Printf("Loaded config with %d sites", len(cfg.Sites))
 	}
 
 	formattedURL, err := processURL(cfg, *urlInput)
