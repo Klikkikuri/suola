@@ -1,4 +1,4 @@
-module com.github.klikkikuri/suola
+module github.com/Klikkikuri/suola
 
 go 1.23.4
 
