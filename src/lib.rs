@@ -38,22 +38,34 @@ pub fn write_buffer(s: &str) {
     }
 }
 
+/// Normalize the URL written in the buffer.
+///
+/// The normalization will:
+/// - Remove dot segments e.g., http://host/path/./a/b/../c -> http://host/path/a/c
+/// - Sort query parameters by key e.g., http://host/path?c=3&b=2&a=1&b=1 -> http://host/path?a=1&b=1&b=2&c=3
+/// - TODO Do all things that the purell library FlagsSafe does, see: https://github.com/PuerkitoBio/purell
 pub fn static_normalize_url() -> Result<String, i32> {
     let Ok(input) = read_buffer() else {
         return Err(1);
     };
 
-    let Ok(url) = Url::parse(&input) else {
+    let Ok(mut url) = Url::parse(&input) else {
         return Err(2);
     };
 
     let normalized_url = {
-        let mut x = url.to_owned();
-        // Remove fragment as it doesn't affect resource identity
-        x.set_fragment(None);
-        // (Optional) You can also remove query parameters if needed
-        x.set_query(None);
-        x.to_string()
+        {
+            let mut sorted_query = Vec::new();
+            for (k, v) in url.query_pairs() {
+                sorted_query.push((k.into_owned(), v.into_owned()));
+            }
+            sorted_query.sort();
+            url.set_query(None);
+            for (k, v) in sorted_query {
+                url.query_pairs_mut().append_pair(&k, &v);
+            }
+        }
+        url.to_string()
     };
 
     return Ok(normalized_url);
@@ -82,32 +94,33 @@ pub fn static_normalize_and_hash_url() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn get_normalized(url: &str) -> String {
+        write_buffer(url);
+
+        let normalized = static_normalize_url().unwrap();
+        return normalized;
+    }
 
     fn get_hash(url: &str) -> String {
-        unsafe {
-            URL_BUFFER = [0; URL_BUFFER_SIZE];
-        }
-
-        for (i, b) in url.bytes().chain(std::iter::once(0)).enumerate() {
-            unsafe {
-                URL_BUFFER[i] = b;
-            }
-        }
+        write_buffer(url);
 
         let result = static_normalize_and_hash_url();
         assert_eq!(result, 0);
 
-        let hash = unsafe {
-            #[allow(static_mut_refs)]
-            let hash_block = URL_BUFFER
-                .iter()
-                .take_while(|b| **b != 0)
-                .cloned()
-                .collect();
-            String::from_utf8(hash_block).unwrap()
-        };
-
+        let hash = read_buffer().unwrap();
         return hash;
+    }
+
+    #[test]
+    fn test_url_remove_dot_segments() {
+        let url = get_normalized("http://host/path/./a/b/../c");
+        assert_eq!(url, "http://host/path/a/c");
+    }
+
+    #[test]
+    fn test_url_sort_query_params() {
+        let url = get_normalized("http://host/path?c=3&b=2&a=1&b=1");
+        assert_eq!(url, "http://host/path?a=1&b=1&b=2&c=3");
     }
 
     #[test]
