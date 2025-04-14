@@ -1,11 +1,8 @@
 
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24
 
 # Use the official golang image to create a build artifact.
 FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} as builder
-
-ENV GOOS=wasip1 \
-    GOARCH=wasm
 
 # Create and change to the app directory.
 WORKDIR /app
@@ -20,7 +17,7 @@ COPY . .
 
 # Build the binary.
 RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    go build -o /app/suola.wasm main.go 
+    GOOS=wasip1 GOARCH=wasm go build -o /app/suola.wasm
 
 FROM builder AS test
 
