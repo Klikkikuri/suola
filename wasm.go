@@ -5,39 +5,24 @@ package main // Build when target is wasm
 
 import (
 	"fmt"
+	"syscall/js"
 )
 
-//export LoadConfig
-func wasmLoadConfig(data []byte) string {
-	err := LoadRules(data)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := fmt.Sprintf("config loaded with %d sites", len(Rules.Sites))
-	return msg
-
+func hashUrl(this js.Value, args []js.Value) interface{} {
+	url := args[0].String()
+	hash := wasmGetSignature(url)
+	return js.ValueOf(hash)
 }
 
-//export GetSignature
-func wasmGetSignature(inputURL string) string {
-	formattedURL, err := processURL(inputURL)
-	if err != nil {
-		fmt.Println("Error:", err)
-		panic(err)
-	}
-	signature := generateSignature(formattedURL)
-	fmt.Println("Signature:", signature)
-
-	return signature
+func RegisterCallbacks() {
+	js.Global().Set("hashUrl", js.FuncOf(hashUrl))
 }
 
-func _start() {
-	// Load the default config
-	err := LoadRules(DefaultCfgData)
-	if err != nil {
-		panic(err)
-	}
+func main() {
+	RegisterCallbacks()
 
-	fmt.Println("WASM module loaded")
+	fmt.Println("[🧂 suola]: Started.")
+
+	// Prevent Go program from exiting immediately
+	select {}
 }

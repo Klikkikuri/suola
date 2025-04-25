@@ -28,3 +28,7 @@ go.work.sum
 *~
 *.bak
 *.swp
+
+# Build/packaged artifacts.
+*.wasm
+wasm_exec.js

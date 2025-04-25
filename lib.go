@@ -199,7 +199,6 @@ func wasmLoadConfig(data []byte) string {
 
 	msg := fmt.Sprintf("config loaded with %d sites", len(Rules.Sites))
 	return msg
-
 }
 
 //export GetSignature
