@@ -168,7 +168,6 @@ func processURL(inputURL string) (string, error) {
 	host := parsed.Host
 
 	for _, site := range Rules.Sites {
-
 		if strings.HasSuffix(host, site.Domain) {
 			for _, rule := range site.Templates {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
@@ -190,26 +189,15 @@ func generateSignature(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-//export LoadConfig
-func wasmLoadConfig(data []byte) string {
-	err := LoadRules(data)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := fmt.Sprintf("config loaded with %d sites", len(Rules.Sites))
-	return msg
-}
-
 //export GetSignature
-func wasmGetSignature(inputURL string) string {
+func GetSignature(inputURL string) (string, error) {
 	formattedURL, err := processURL(inputURL)
 	if err != nil {
 		fmt.Println("Error:", err)
-		panic(err)
+		return "", err
 	}
 	signature := generateSignature(formattedURL)
 	fmt.Println("Signature:", signature)
 
-	return signature
+	return signature, nil
 }

@@ -10,8 +10,11 @@ import (
 
 func hashUrl(this js.Value, args []js.Value) interface{} {
 	url := args[0].String()
-	hash := wasmGetSignature(url)
-	return js.ValueOf(hash)
+	hash, error := GetSignature(url)
+	if error != nil {
+		return nil
+	}
+	return hash
 }
 
 func RegisterCallbacks() {
@@ -20,6 +23,10 @@ func RegisterCallbacks() {
 
 func main() {
 	RegisterCallbacks()
+	err := LoadRules(DefaultCfgData)
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Println("[🧂 suola]: Started.")
 
