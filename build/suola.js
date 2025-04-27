@@ -1,4 +1,9 @@
-const go = new Go();
-WebAssembly.instantiateStreaming(fetch("suola.wasm"), go.importObject).then((result) => {
+async function initSuola(suolaUrl) {
+    // Fallback for non-extension runs.
+    if (!suolaUrl) {
+        suolaUrl = "suola.wasm";
+    }
+    const go = new Go();
+    const result = await WebAssembly.instantiateStreaming(fetch(suolaUrl), go.importObject);
     go.run(result.instance);
-});
+}
