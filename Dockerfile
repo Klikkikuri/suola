@@ -44,3 +44,7 @@ COPY . .
 
 # To be considered; Should we add the rules.yaml file a remote repo?
 # ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
+
+FROM builder AS runnative
+
+ENTRYPOINT ["go", "run", "."]
