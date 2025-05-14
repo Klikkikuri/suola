@@ -108,7 +108,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 	if rule._Regex != nil {
 		matches := rule._Regex.FindStringSubmatch(u.Path)
 		if matches == nil {
-			fmt.Println("No matches found in path '%s' for pattern '%s'", u.Path, rule._Regex.String())
+			fmt.Printf("No matches found in path '%s' for pattern '%s'\n", u.Path, rule._Regex.String())
 		} else {
 			for i, name := range rule._Regex.SubexpNames() {
 				if i > 0 && name != "" && matches[i] != "" {
