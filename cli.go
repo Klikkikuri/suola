@@ -24,7 +24,7 @@ func main() {
 		DefaultCfgData = mustReadConfig(*configPath)
 		fmt.Println("Loaded config from %s", *configPath)
 	} else {
-		fmt.Println("Using inbuild config with %d bytes", len(DefaultCfgData))
+		fmt.Printf("Using inbuild config with %d bytes\n", len(DefaultCfgData))
 	}
 	err := LoadRules(DefaultCfgData)
 	if err != nil {
