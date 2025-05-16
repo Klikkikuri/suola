@@ -52,13 +52,13 @@ var Rules *Config
 func mustReadConfig(path string) []byte {
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Failed to open config file: %v", err)
+		fmt.Printf("Failed to open config file: %v\n", err)
 		panic(err)
 	}
 	defer f.Close()
 	data, err := io.ReadAll(f)
 	if err != nil {
-		fmt.Println("Failed to read config file: %v", err)
+		fmt.Printf("Failed to read config file: %v\n", err)
 		panic(err)
 	}
 	return data
