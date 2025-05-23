@@ -23,3 +23,12 @@ go.work.sum
 
 # env file
 .env
+
+# Backup files
+*~
+*.bak
+*.swp
+
+# Build/packaged artifacts.
+*.wasm
+wasm_exec.js

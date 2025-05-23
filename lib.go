@@ -4,10 +4,8 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -46,27 +44,31 @@ type Config struct {
 }
 
 //go:embed rules.yaml
-var cfgData []byte
+var DefaultCfgData []byte
+
+var Rules *Config
 
 // Read config from file
 func mustReadConfig(path string) []byte {
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Failed to open config file: %v", err)
+		fmt.Printf("Failed to open config file: %v\n", err)
+		panic(err)
 	}
 	defer f.Close()
 	data, err := io.ReadAll(f)
 	if err != nil {
-		log.Fatalf("Failed to read config file: %v", err)
+		fmt.Printf("Failed to read config file: %v\n", err)
+		panic(err)
 	}
 	return data
 }
 
 // Load and compile the YAML config
-func loadConfig(data []byte) (*Config, error) {
+func LoadRules(data []byte) error {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing YAML: %w", err)
+		return fmt.Errorf("parsing YAML: %w", err)
 	}
 
 	// Compile regex and parse templates
@@ -74,20 +76,23 @@ func loadConfig(data []byte) (*Config, error) {
 		for j := range cfg.Sites[i].Templates {
 			tmpl, err := template.New("urlTemplate").Parse(cfg.Sites[i].Templates[j].Template)
 			if err != nil {
-				return nil, fmt.Errorf("parsing template for domain %s: %w", cfg.Sites[i].Domain, err)
+				return fmt.Errorf("parsing template for domain %s: %w", cfg.Sites[i].Domain, err)
 			}
 			cfg.Sites[i].Templates[j]._Template = tmpl
 
 			if cfg.Sites[i].Templates[j].Pattern != "" {
 				re, err := regexp.Compile(cfg.Sites[i].Templates[j].Pattern)
 				if err != nil {
-					return nil, fmt.Errorf("compiling regex for domain %s: %w", cfg.Sites[i].Domain, err)
+					return fmt.Errorf("compiling regex for domain %s: %w", cfg.Sites[i].Domain, err)
 				}
 				cfg.Sites[i].Templates[j]._Regex = re
 			}
 		}
 	}
-	return &cfg, nil
+
+	Rules = &cfg
+
+	return nil
 }
 
 // Normalize URL using purell
@@ -103,7 +108,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 	if rule._Regex != nil {
 		matches := rule._Regex.FindStringSubmatch(u.Path)
 		if matches == nil {
-			log.Printf("No matches found in path '%s' for pattern '%s'", u.Path, rule._Regex.String())
+			fmt.Printf("No matches found in path '%s' for pattern '%s'\n", u.Path, rule._Regex.String())
 		} else {
 			for i, name := range rule._Regex.SubexpNames() {
 				if i > 0 && name != "" && matches[i] != "" {
@@ -146,7 +151,7 @@ func formatURL(u *url.URL, rule TemplateRule, fields map[string]string) (string,
 }
 
 // Process a given URL and match it with site rules
-func processURL(cfg *Config, inputURL string) (string, error) {
+func processURL(inputURL string) (string, error) {
 	normalizedURL, err := normalizeURL(inputURL)
 	if err != nil {
 		return "", err
@@ -162,8 +167,7 @@ func processURL(cfg *Config, inputURL string) (string, error) {
 	//host := strings.TrimPrefix(parsed.Host, "www.")
 	host := parsed.Host
 
-	for _, site := range cfg.Sites {
-
+	for _, site := range Rules.Sites {
 		if strings.HasSuffix(host, site.Domain) {
 			for _, rule := range site.Templates {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
@@ -185,33 +189,15 @@ func generateSignature(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func main() {
-	configPath := flag.String("config", "", "Path to YAML configuration file")
-	urlInput := flag.String("url", "", "URL to process")
-	signFlag := flag.Bool("sign", false, "Generate signature of the final URL")
-	flag.Parse()
-
-	if *urlInput == "" {
-		log.Fatal("URL input is required")
-	}
-	if configPath != nil && *configPath != "" {
-		cfgData = mustReadConfig(*configPath)
-		log.Printf("Loaded config from %s", *configPath)
-	}
-	cfg, err := loadConfig(cfgData)
+//export GetSignature
+func GetSignature(inputURL string) (string, error) {
+	formattedURL, err := processURL(inputURL)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	} else {
-		log.Printf("Loaded config with %d sites", len(cfg.Sites))
+		fmt.Println("Error:", err)
+		return "", err
 	}
+	signature := generateSignature(formattedURL)
+	fmt.Println("Signature:", signature)
 
-	formattedURL, err := processURL(cfg, *urlInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Formatted URL:", formattedURL)
-	if *signFlag {
-		fmt.Println("Signature:", generateSignature(formattedURL))
-	}
+	return signature, nil
 }
