@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"testing"
 )
@@ -32,7 +31,7 @@ func TestWasiProgram(t *testing.T) {
 	// start wasmtime
 	cmd := exec.Command("wasmtime", "build/wasi.wasm")
 	var out bytes.Buffer
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = &out
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -52,6 +51,9 @@ func TestWasiProgram(t *testing.T) {
 				fmt.Printf("Running test case: %s", testName)
 				fmt.Printf(" with URL: %s\n", testCase.Url)
 
+				// Reset the output buffer
+				out.Reset()
+
 				inputLines := []string{testCase.Url}
 
 				for _, line := range inputLines {
@@ -69,12 +71,13 @@ func TestWasiProgram(t *testing.T) {
 					} else {
 						t.Logf("✅ Test passed for: %s\n", testCase.Url)
 					}
-
 				}
 			})
 		}
 	}
-	stdin.Close()
+	if err := stdin.Close(); err != nil {
+		t.Fatalf("failed to close stdin: %v", err)
+	}
 
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("command failed: %v", err)
