@@ -4,14 +4,14 @@ BUILD_JS := $(BUILD_DIR)/js.wasm
 
 LD_FLAGS := -s -w
 
-all: js wasi
+build: js wasi
 
 js:
 	GOOS=js GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_JS)" lib.go js.go
 	# wasm-opt -Os -o $(BUILD_DIR)/js.wasm $(BUILD_DIR)/js.wasm
 
 wasi:
-	GOOS=wasip1 GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -buildmode=c-shared -o "$(BUILD_WASI)" lib.go wasi.go
+	GOOS=wasip1 GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_WASI)" lib.go wasi.go
 
 clean:
 	rm -f $(BUILD_JS) $(BUILD_WASI) $(TEST_RUNNER)
@@ -22,4 +22,4 @@ test:
 test-wasi:
 	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola
 
-.PHONY: all js wasi test-wasi test clean
+.PHONY: build js wasi test-wasi test clean
