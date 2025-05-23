@@ -20,6 +20,6 @@ test:
 	go test -v github.com/Klikkikuri/suola
 
 test-wasi:
-	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola
+	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola -tags=wasi
 
 .PHONY: build js wasi test-wasi test clean
