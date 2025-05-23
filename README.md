@@ -9,6 +9,49 @@ Suola 🧂 provides two WebAssembly (Wasm) modules built from the same Go librar
 - URL normalization and hashing.
 - Support for both browser and WASI environments.
 
+## Signature rules (rules.yaml)
+
+Rules are embedded in the Wasm module, and the module will not work without them. The rules are defined in a YAML file (`rules.yaml`) that is read by the module at runtime.
+
+Signatures are generated using SHA-256 hashing. The input URL is normalized according to the rules defined in the `rules.yaml` file, and then the hash is computed. This ensures that the same URL will always produce the same signature, regardless of its original format.
+
+URL normalization rules defined per domain. Rules are applied in the order they are defined. The first matching rule will be used for normalization and hashing.
+
+```yaml
+sites:
+  - domain: example.com
+    templates:
+      - pattern: "(?P<GroupName>[^/]+)"       # Named regex groups
+        query_params:                          # Extract query params
+          Field: "param_name"
+        template: "https://{{ .Domain }}/{{ .GroupName }}"
+        transform:                             # Field transformations
+          GroupName: "lowercase"               # Only "lowercase" supported
+    tests:
+      - url: "input_url"
+        expected: "expected_output"
+        signature: "sha256_hash"               # Can also use "sign"
+```
+
+**Fields:**
+- `pattern`: Regex with named groups `(?P<Name>...)` for path extraction
+- `query_params`: Map field names to query parameter names
+- `template`: Go template with `{{ .Field }}` placeholders
+- `transform`: Apply `lowercase` to extracted fields
+
+**Example:**
+```yaml
+sites:
+  - domain: iltalehti.fi
+    templates:
+      - pattern: "/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
+        template: "https://www.iltalehti.fi/{{ .Section }}/a/{{ .ArticleID }}"
+        transform:
+          Section: "lowercase"
+```
+
+**Processing:** URL normalization → domain matching → regex extraction → field transformation → template rendering → SHA-256 hashing
+
 ## Prerequisites
 
 - Go 1.24 or later
