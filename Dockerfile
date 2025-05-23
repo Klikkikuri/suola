@@ -44,6 +44,8 @@ RUN chmod +x /tmp/install-wasmtime.sh && \
     echo "export PATH=\$PATH:$WASMTIME_HOME/bin" >> /etc/profile && \
     rm -f /tmp/install-wasmtime.sh
 
+USER vscode
+
 RUN --mount=type=bind,source=go.mod,target=go.mod \
     --mount=type=bind,source=go.sum,target=go.sum \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
