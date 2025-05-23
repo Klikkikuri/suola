@@ -35,6 +35,15 @@ FROM mcr.microsoft.com/devcontainers/go:${GO_VERSION}-bookworm AS devcontainer
 # Create and change to the app directory.
 WORKDIR /app
 
+ENV WASMTIME_HOME=/usr/local/wasmtime
+
+# Install wasmtime
+ADD https://wasmtime.dev/install.sh /tmp/install-wasmtime.sh
+RUN chmod +x /tmp/install-wasmtime.sh && \
+    /tmp/install-wasmtime.sh --version v33.0.0 && \
+    echo "export PATH=\$PATH:$WASMTIME_HOME/bin" >> /etc/profile && \
+    rm -f /tmp/install-wasmtime.sh
+
 RUN --mount=type=bind,source=go.mod,target=go.mod \
     --mount=type=bind,source=go.sum,target=go.sum \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \

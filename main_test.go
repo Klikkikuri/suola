@@ -1,4 +1,3 @@
-// main_test.go
 package main
 
 import (
@@ -10,17 +9,17 @@ func TestExtractionRules(t *testing.T) {
 	// Read the config using mustReadConfig
 	data := mustReadConfig("rules.yaml")
 
-	config, err := loadConfig(data)
+	err := LoadRules(data)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	for _, site := range config.Sites {
+	for _, site := range Rules.Sites {
 		for _, test := range site.Tests {
 			t.Run(fmt.Sprintf("%s/%s", site.Domain, test.Url), func(t *testing.T) {
 				var hashed = ""
 
-				resUrl, nil := processURL(config, test.Url)
+				resUrl, err := processURL(test.Url)
 
 				if test.Signature != "" {
 					hashed = generateSignature(resUrl)

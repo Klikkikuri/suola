@@ -1,7 +1,8 @@
-//go:build !js
-// +build !js
+// Don't build when target is wasm
+//go:build !js && !wasip1
+// +build !js,!wasip1
 
-package main // Don't build when target is wasm
+package main
 
 import (
 	"flag"
@@ -28,10 +29,10 @@ func main() {
 	}
 	err := LoadRules(DefaultCfgData)
 	if err != nil {
-		fmt.Println("Failed to load config: %v", err)
+		fmt.Printf("Failed to load config: %v", err)
 		os.Exit(1)
 	} else {
-		fmt.Println("Loaded config with %d sites", len(Rules.Sites))
+		fmt.Printf("Loaded config with %d sites", len(Rules.Sites))
 	}
 
 	formattedURL, err := processURL(*urlInput)
