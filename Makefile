@@ -14,12 +14,12 @@ wasi:
 	GOOS=wasip1 GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_WASI)" lib.go wasi.go
 
 clean:
-	rm -f $(BUILD_JS) $(BUILD_WASI) $(TEST_RUNNER)
+	rm -f "$(BUILD_JS)" "$(BUILD_WASI)" "$(TEST_RUNNER)"
 
 test:
 	go test -v github.com/Klikkikuri/suola
 
 test-wasi:
-	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola -tags=wasi
+	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola
 
 .PHONY: build js wasi test-wasi test clean

@@ -1,6 +1,3 @@
-//go:build wasi
-// +build wasi
-
 package main
 
 import (

@@ -1,5 +1,6 @@
 
 ARG GO_VERSION=1.24
+ARG WASMTIME_HOME=/usr/local/wasmtime
 
 # Use the official golang image to create a build artifact.
 FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS builder
@@ -17,41 +18,47 @@ COPY . .
 
 # Build the binary.
 
-CMD ["./build.sh"]
+# To be considered; Should we add the rules.yaml file a remote repo?
+# ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
 
+ENTRYPOINT ["make", "build"]
+
+## Test stage
+## ==========
 FROM builder AS test
 
-RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    go test -v main.go
+ARG WASMTIME_HOME
+ENV WASMTIME_HOME=$WASMTIME_HOME
 
-# Devcontainer
-FROM mcr.microsoft.com/devcontainers/go:${GO_VERSION}-bookworm AS devcontainer
+# Install wasmtime for testing wasi
+# Install xz-utils for extracting the wasmtime tarball
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends xz-utils
 
-# # Install TinyGo
-# RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-#     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-#     apt-get update && apt-get --no-install-recommends install -y \
+ADD https://wasmtime.dev/install.sh /tmp/install-wasmtime.sh
+RUN chmod +x /tmp/install-wasmtime.sh && \
+    echo "Installing wasmtime to ${WASMTIME_HOME}" && \
+    /tmp/install-wasmtime.sh --version v33.0.0 && \
+    echo "export PATH=\$PATH:${WASMTIME_HOME}/bin" >> /etc/profile.d/wasmtime.sh && \
+    chmod +x /etc/profile.d/wasmtime.sh && \
+    rm -f /tmp/install-wasmtime.sh
+
+ENTRYPOINT ["make", "test"]
+
+## Development stage
+## =================
+FROM mcr.microsoft.com/devcontainers/go:${GO_VERSION} AS devcontainer
 
 # Create and change to the app directory.
 WORKDIR /app
 
-ENV WASMTIME_HOME=/usr/local/wasmtime
+# Copy wasmtime from the test stage
+ARG WASMTIME_HOME
+ENV WASMTIME_HOME=${WASMTIME_HOME}
+COPY --from=test ${WASMTIME_HOME} ${WASMTIME_HOME}
+COPY --from=test /etc/profile.d/wasmtime.sh /etc/profile.d/wasmtime.sh
 
-# Install wasmtime
-ADD https://wasmtime.dev/install.sh /tmp/install-wasmtime.sh
-RUN chmod +x /tmp/install-wasmtime.sh && \
-    /tmp/install-wasmtime.sh --version v33.0.0 && \
-    echo "export PATH=\$PATH:$WASMTIME_HOME/bin" >> /etc/profile && \
-    rm -f /tmp/install-wasmtime.sh
-
-USER vscode
-
-RUN --mount=type=bind,source=go.mod,target=go.mod \
-    --mount=type=bind,source=go.sum,target=go.sum \
-    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    go mod download
-
-COPY . .
-
-# To be considered; Should we add the rules.yaml file a remote repo?
-# ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
+COPY --from=builder /go /go
+COPY --from=builder --chown=1000:1000 /app /app
