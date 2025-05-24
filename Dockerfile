@@ -21,7 +21,7 @@ COPY . .
 # To be considered; Should we add the rules.yaml file a remote repo?
 # ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
 
-CMD ["/bin/bash", "-c", "make", "test"]
+CMD ["/bin/bash", "-c", "make build"]
 
 ## Test stage
 ## ==========
@@ -46,7 +46,7 @@ RUN chmod +x /tmp/install-wasmtime.sh && \
     chmod +x /etc/profile.d/wasmtime.sh && \
     rm -f /tmp/install-wasmtime.sh
 
-CMD ["/bin/bash", "-c", "make", "test"]
+CMD ["/bin/bash", "-c", "make test"]
 
 ## Development stage
 ## =================
