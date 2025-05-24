@@ -21,7 +21,7 @@ COPY . .
 # To be considered; Should we add the rules.yaml file a remote repo?
 # ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
 
-CMD ["make", "build"]
+CMD ["/bin/bash", "-c", "make", "test"]
 
 ## Test stage
 ## ==========
@@ -29,6 +29,7 @@ FROM builder AS test
 
 ARG WASMTIME_HOME
 ENV WASMTIME_HOME=$WASMTIME_HOME
+ENV PATH=$PATH:${WASMTIME_HOME}/bin
 
 # Install wasmtime for testing wasi
 # Install xz-utils for extracting the wasmtime tarball
@@ -45,7 +46,7 @@ RUN chmod +x /tmp/install-wasmtime.sh && \
     chmod +x /etc/profile.d/wasmtime.sh && \
     rm -f /tmp/install-wasmtime.sh
 
-CMD ["make", "test"]
+CMD ["/bin/bash", "-c", "make", "test"]
 
 ## Development stage
 ## =================
