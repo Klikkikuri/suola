@@ -21,7 +21,7 @@ COPY . .
 # To be considered; Should we add the rules.yaml file a remote repo?
 # ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
 
-ENTRYPOINT ["make", "build"]
+CMD ["make", "build"]
 
 ## Test stage
 ## ==========
@@ -45,7 +45,7 @@ RUN chmod +x /tmp/install-wasmtime.sh && \
     chmod +x /etc/profile.d/wasmtime.sh && \
     rm -f /tmp/install-wasmtime.sh
 
-ENTRYPOINT ["make", "test"]
+CMD ["make", "test"]
 
 ## Development stage
 ## =================
@@ -60,5 +60,9 @@ ENV WASMTIME_HOME=${WASMTIME_HOME}
 COPY --from=test ${WASMTIME_HOME} ${WASMTIME_HOME}
 COPY --from=test /etc/profile.d/wasmtime.sh /etc/profile.d/wasmtime.sh
 
-COPY --from=builder /go /go
+COPY --from=builder --chown=1000:1000 /go /go
 COPY --from=builder --chown=1000:1000 /app /app
+
+USER vscode
+
+CMD ["/bin/bash"]
