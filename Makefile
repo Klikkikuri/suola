@@ -8,7 +8,7 @@ build: js wasi
 
 js:
 	GOOS=js GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_JS)" lib.go js.go
-	# Copy JS<->WASM glue provided with Go.
+	# Copy JS support file provided with Go.
 	cp "$(shell go env GOROOT)/lib/wasm/wasm_exec.js" $(BUILD_DIR)
 	# wasm-opt -Os -o $(BUILD_DIR)/js.wasm $(BUILD_DIR)/js.wasm
 
