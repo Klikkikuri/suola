@@ -56,8 +56,14 @@ jobs:
             -v ${{ github.workspace }}/build:/app/build \
             test-runner
 
+      # Setup go for svu
+      # svu is used to manage semantic versioning
+      - name: "🦺 Set up Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
       - name: "📦 Install svu"
-        run: go install github.com/caarlos0/svu@v3.2.3
+        run: go install github.com/caarlos0/svu@v1.12
 
       - name: "🔢 Generate version"
         run: |
