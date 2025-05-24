@@ -14,7 +14,11 @@
 		"vscode": {
             "settings": {
                 "go.useLanguageServer": true
-            }
+			},
+			"extensions": [
+				"GitHub.vscode-pull-request-github",
+				"github.vscode-github-actions"
+			]
         }
     }
 }
