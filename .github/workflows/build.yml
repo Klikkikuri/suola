@@ -1,4 +1,11 @@
-name: Build and Upload Artifacts
+name: "🚀 Build and Upload Artifacts 🏗️"
+
+# Details about the workflow:
+# - `Dockerfile` uses multi-stage builds to create a "build", "test", and "devcontainer" stage.
+# - Builds both browser and WASI Wasm modules and uploads them as artifacts.
+# - Uses `svu` for automatic semantic versioning and tagging.
+# - Releases are only created on pushes to the main branch.
+# - Tests are run in a containerized environment to ensure consistency. 
 
 on:
   push:
@@ -9,49 +16,56 @@ on:
     branches: 
      - main
 
+permissions:
+  contents: write  # required for creating releases and uploading artifacts
+  actions: read  # required for uploading artifacts
+  id-token: write  # Required for attestation
+  attestations: write  # Required for attestation
+
+env:
+  # Set the default version to dev if not specified
+  version: "dev"
+  is_release: false
+
 jobs:
   build:
-    name: Build Modules
+    name: "🛠️ Build Modules"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - name: "🔄 Checkout code"
+        uses: actions/checkout@v4
         with:
-          go-version: '1.24'
+          fetch-depth: 0  # Needed for svu to work properly
 
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: "🔧 Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
 
-      - name: Install dependencies
-        run: go mod tidy
-
-      - name: Run tests
+      - name: "🏗️ Build artifacts (in Docker container)"
         run: |
-          make test
+          docker build --target builder -t app-builder .
+          # Run the build entrypoint inside the container
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            app-builder
 
-      - name: Build modules
+      - name: "🧪 Run tests (in Docker container)"
         run: |
-          make build
+          docker build --target test -t test-runner .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            test-runner
 
-      - name: Install svu
-        run: go install github.com/caarlos0/svu@latest
+      - name: "📦 Install svu"
+        run: go install github.com/caarlos0/svu@v3.2.3
 
-      - name: Generate version
-        id: version
+      - name: "🔢 Generate version"
         run: |
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
             # Auto-bump version on main branch
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
             NEXT_VERSION=$(svu next)
             git tag $NEXT_VERSION
             git push origin $NEXT_VERSION
@@ -64,16 +78,26 @@ jobs:
             echo "is_release=false" >> $GITHUB_ENV
           fi
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+      - name: "⬆️ Upload artifacts"
+        # Upload the build artifacts to the GitHub Actions workspace
+        # This is useful for testing
+        uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ env.version }}
+          name: build-${{ env.version }}
           path: build/*.wasm
 
-      - name: Create GitHub Release
+      - name: "🏷️ Create GitHub Release"
         if: env.is_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.version }}
           files: build/*.wasm
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🔒 Attest release artifacts"
+        if: env.is_release == 'true'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'build/*.wasm'
