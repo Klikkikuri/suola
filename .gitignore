@@ -31,4 +31,3 @@ go.work.sum
 
 # Build/packaged artifacts.
 *.wasm
-wasm_exec.js
