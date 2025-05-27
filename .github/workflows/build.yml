@@ -90,14 +90,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ env.version }}
-          path: build/*.wasm
+          path: |
+            build/*.wasm
+            build/wasm_exec.js
 
       - name: "🏷️ Create GitHub Release"
         if: env.is_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.version }}
-          files: build/*.wasm
+          files: |
+            build/*.wasm
+            build/wasm_exec.js
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,4 +110,4 @@ jobs:
         if: env.is_release == 'true'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'build/*.wasm'
+          subject-path: 'build/*.wasm, build/wasm_exec.js'
