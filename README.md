@@ -92,3 +92,9 @@ You can test the module directly using the Go CLI:
 ```sh
 go run . -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
 ```
+
+## License
+
+Suola is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+This project includes 'wasm_exec.js' from the Go project, licensed under the [BSD 3-Clause License](https://github.com/golang/go/blob/master/LICENSE).
