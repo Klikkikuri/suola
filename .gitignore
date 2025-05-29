@@ -30,4 +30,7 @@ go.work.sum
 *.swp
 
 # Build/packaged artifacts.
-*.wasm
+build/*
+# Test files
+!build/suola.js
+!build/index.html
