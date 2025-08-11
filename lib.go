@@ -197,7 +197,6 @@ func GetSignature(inputURL string) (string, error) {
 		return "", err
 	}
 	signature := generateSignature(formattedURL)
-	fmt.Println("Signature:", signature)
 
 	return signature, nil
 }
