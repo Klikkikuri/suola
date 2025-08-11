@@ -31,7 +31,7 @@ func main() {
 		formattedURL, err := processURL(line)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			continue
 		}
 		fmt.Println(generateSignature(formattedURL))
 	}
