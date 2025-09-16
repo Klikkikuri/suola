@@ -3,7 +3,7 @@ name = "suola"
 dynamic = ["version"]
 description = "Klikkikuri shared URL normalization and hashing WebAssembly module"
 readme = "../README.md"
-license-files = ["../LICENSE"]
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4.3.8",
@@ -64,6 +64,6 @@ include = [
 packages = ["src/suola"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"../build/wasi.wasm" = "suola.wasm"
+"../build/wasi.wasm" = "suola/suola.wasm"
 "../README.md" = "suola/README.md"
-"../LICENSE" = "suola/LICENSE"
+"../LICENSE" = "LICENSE"
