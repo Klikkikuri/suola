@@ -59,7 +59,7 @@ def get_pkg_info(pkg_name: str | None = __package__) -> PkgInfo:
             version = metadata["Version"]
 
     except importlib.metadata.PackageNotFoundError:
-        raise ValueError(f"Package '{pkg_name}' not found") from None
+        raise ValueError(f"Package '{pkg_name}' not found")
 
     result = PkgInfo(appname=appname, appauthor=appauthor, version=version)
 
