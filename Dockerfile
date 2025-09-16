@@ -12,7 +12,7 @@ ARG PYTHON_VERSION=3.11
 ##
 ## Builder stage
 ## =============
-FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS builder
+FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS wasm-builder
 
 # Create and change to the app directory.
 WORKDIR /app
@@ -30,11 +30,11 @@ COPY . .
 # To be considered; Should we add the rules.yaml file a remote repo?
 # ADD git@github.com:Klikkikuri/rahti.git:rules.yaml /app/rules.yaml
 
-CMD ["/bin/bash", "-c", "make build"]
+CMD ["/bin/bash", "-c", "make build-wasm"]
 
 ## Test stage
 ## ==========
-FROM builder AS test
+FROM wasm-builder AS test
 
 ARG WASMTIME_HOME
 ENV WASMTIME_HOME=$WASMTIME_HOME
@@ -96,8 +96,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         "${UV_PROJECT_ENVIRONMENT}"
 
 # Copy build objects
-COPY --from=builder . .
-RUN make python
+COPY --from=wasm-builder . .
+CMD ["/bin/bash", "-c", "make build-wasm"]
 
 ## Development stage
 ## =================
@@ -119,8 +119,8 @@ ENV WASMTIME_HOME=${WASMTIME_HOME}
 COPY --from=test ${WASMTIME_HOME} ${WASMTIME_HOME}
 COPY --from=test /etc/profile.d/wasmtime.sh /etc/profile.d/wasmtime.sh
 
-COPY --from=builder --chown=1000:1000 /go /go
-COPY --from=builder --chown=1000:1000 /app /app
+COPY --from=wasm-builder --chown=1000:1000 /go /go
+COPY --from=wasm-builder --chown=1000:1000 /app /app
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \

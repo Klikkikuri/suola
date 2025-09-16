@@ -4,7 +4,8 @@ BUILD_JS := $(BUILD_DIR)/js.wasm
 BUILD_JS_WASM_EXEC := $(BUILD_DIR)/wasm_exec.js
 LD_FLAGS := -s -w
 
-build: js wasi python
+build: build-wasm build-python
+build-wasm: js wasi
 
 $(BUILD_DIR):
 	mkdir -p "$(BUILD_DIR)"
@@ -17,7 +18,7 @@ js: $(BUILD_DIR)
 wasi: $(BUILD_DIR)
 	GOOS=wasip1 GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_WASI)" lib.go wasi.go
 
-python: $(BUILD_DIR) $(BUILD_WASI)
+build-python: $(BUILD_DIR) $(BUILD_WASI)
 	# Build the Python wheel.
 	uv build -o "$(BUILD_DIR)" --wheel "$(shell pwd)/python/"
 

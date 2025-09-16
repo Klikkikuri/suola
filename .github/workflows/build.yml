@@ -41,13 +41,21 @@ jobs:
       - name: "🔧 Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
 
-      - name: "🏗️ Build artifacts (in Docker container)"
+      - name: "🏗️ Build wasm modules (in Docker container)"
         run: |
           docker build --target builder -t app-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
-            app-builder
+            wasm-builder
+
+      - name: "🏗️ Build python wheel (in Docker container)"
+        run: |
+          docker build --target python-builder -t python-builder .
+          # Run the build entrypoint inside the container
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-builder
 
       - name: "🧪 Run tests (in Docker container)"
         run: |
