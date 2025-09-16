@@ -91,6 +91,7 @@ jobs:
         with:
           name: build-${{ env.version }}
           path: |
+            build/suola-*.whl
             build/*.wasm
             build/wasm_exec.js
 
@@ -100,6 +101,7 @@ jobs:
         with:
           tag_name: ${{ env.version }}
           files: |
+            build/suola-*.whl
             build/*.wasm
             build/wasm_exec.js
           generate_release_notes: true
@@ -110,4 +112,4 @@ jobs:
         if: env.is_release == 'true'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'build/*.wasm, build/wasm_exec.js'
+          subject-path: 'build/*.wasm, build/wasm_exec.js, build/suola-*.whl'
