@@ -1,13 +1,52 @@
 sites:
+  - domain: aksa.fi
+    templates:
+      - pattern: "/(?P<ArticleTitle>[^/]+)/"
+        template: "https://aksa.fi/{{ .ArticleTitle }}"
+    tests:
+      - url: https://aksa.fi/aanekosken-keilailuliiton-mestaruudet-on-ratkottu-aanekoskella-ja-saarijarvella-maailmanmestaruudet-hong-kongissa/
+        expected: https://aksa.fi/aanekosken-keilailuliiton-mestaruudet-on-ratkottu-aanekoskella-ja-saarijarvella-maailmanmestaruudet-hong-kongissa
+        sign: 992b74d32c98df49159acffa299ab51a6d1f24b368e08860f29f06c14419ae08
+
   - domain: iltalehti.fi
     templates:
       - pattern: "/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
         template: "https://www.iltalehti.fi/{{ .Section }}/a/{{ .ArticleID }}"
         transform:
           Section: "lowercase"
-
     tests:
       - url: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
         expected: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
         sign: 7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c
 
+  - domain: is.fi
+    templates:
+      # NOTE: The MaybeOutlet should contain the leading slash / when inserted to the template.
+      - pattern: "(?P<MaybeOutlet>^/[^/]+)?/(?P<Section>[^/]+)/(?P<ArticleDocument>[^/]+)"
+        template: "https://www.is.fi{{ .MaybeOutlet }}/{{ .Section }}/{{ .ArticleDocument }}"
+    tests:
+      - url: https://www.is.fi/menaiset/tyyli/art-2000011677707.html
+        expected: https://www.is.fi/menaiset/tyyli/art-2000011677707.html
+        sign: fc027d5345edac805d60218db44e087c046592c10d6988262bcc2556f276633e
+      - url: https://www.is.fi/tyyli/art-2000011677707.html
+        expected: https://www.is.fi/tyyli/art-2000011677707.html
+        sign: 4d8ec582a49f6622ea35ceb6508815f78c1834ce2dbae622cd12f3dfad7129f6
+
+  - domain: mtvuutiset.fi
+    templates:
+      # NOTE: The MaybeSection should contain the leading slash / when inserted to the template.
+      - pattern: "(?P<MaybeSection>^/[^/]+)?/artikkeli/(?P<ArticleTitle>[^/]+)/(?P<ArticleID>[^/]+)"
+        template: "https://www.mtvuutiset.fi{{ .MaybeSection }}/artikkeli/{{ .ArticleTitle }}/{{ .ArticleID }}"
+    tests:
+      - url: https://www.mtvuutiset.fi/artikkeli/spermaskandaali-paisuu-euroopassa/9268218
+        expected: https://www.mtvuutiset.fi/artikkeli/spermaskandaali-paisuu-euroopassa/9268218
+        sign: 61861193e02d89b0176a88aa0c3473d29c4742522a59d4111f08dcd5e3f6417c
+
+  - domain: yle.fi
+    templates:
+      - pattern: "/(uutiset|a)(/lyhyesti)?/(?P<ArticleID>[^/]+)"
+        template: "https://yle.fi/a/{{ .ArticleID }}"
+    tests:
+      - url: https://yle.fi/uutiset/lyhyesti/74-20194304
+        expected: https://yle.fi/a/74-20194304
+        sign: f0f7af3fb1130daa54674b37f55c16cc647b871b93aadf919531416790565487
