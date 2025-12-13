@@ -57,9 +57,9 @@ sites:
 
   - domain: faktabaari.fi
     templates:
-      - pattern: "^/fakta/(?P<ArticleSlug>[^/]+)/?"
+      - pattern: "^/fakta/(?P<ArticleSlug>[^/]+)(?:/)?$"
         template: "https://faktabaari.fi/fakta/{{ .ArticleSlug }}/"
-      - pattern: "^/nakokulmat/(?P<OpinionSlug>[^/]+)/?"
+      - pattern: "^/nakokulmat/(?P<OpinionSlug>[^/]+)(?:/)?$"
         template: "https://faktabaari.fi/nakokulmat/{{ .OpinionSlug }}/"
     tests:
       - url: https://faktabaari.fi/fakta/myytti-eu-alistaa-jasenvaltiot/
@@ -69,6 +69,9 @@ sites:
         expected: https://faktabaari.fi/fakta/sveitsi-norja-menestyvat-eu-ulkopuolella/
         signature: c563acc599f2d46650dc1c9db8d01aff4ebe536cdab0fc3325855a9209cec5a2
       - url: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        expected: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        signature: b12e7148965241984caa35c0492d9a12fe04e0936aab923c6b917d285e44c03e
+      - url: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua?utm_source=test
         expected: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
         signature: b12e7148965241984caa35c0492d9a12fe04e0936aab923c6b917d285e44c03e
       - url: https://faktabaari.fi/nakokulmat/tervetuloa/
