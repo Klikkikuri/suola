@@ -7,7 +7,7 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4.3.8",
-    "wasmtime>=33.0.0",
+    "wasmtime>=39.0.0",
 ]
 authors = [
 	{name="Teemu Autto", email="klikkikuri@teemu.rautakuu.org"},
