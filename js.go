@@ -8,9 +8,9 @@ import (
 	"syscall/js"
 )
 
-func hashUrl(this js.Value, args []js.Value) interface{} {
+func hashUrl(this js.Value, args []js.Value) any {
 	url := args[0].String()
-	hash, error := GetSignature(url)
+	hash, error := getSignature(url)
 	if error != nil {
 		return nil
 	}

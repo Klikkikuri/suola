@@ -2,8 +2,7 @@ import logging
 from pathlib import Path
 from typing import Protocol
 
-from ._daemon import ProcessManager
-from ._wasm import get_wasi_module
+from ._wasm import WasmRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -25,68 +24,67 @@ class SuolaAPI(Protocol):
 
 class Suola(SuolaAPI):
     """
-    WebAssembly-based URL hashing API using WASI module.
+    URL hashing API using WASM runtime.
 
-    This class uses a WASI module to hash URLs. It initializes the WASI environment and provides
-    a callable interface to hash URLs. It uses wasmtime for executing the WASI module.
-Usage::
+    Provides a simple callable interface for URL hashing with the Suola algorithm.
+
     Example usage:
     .. code-block:: python
 
         from suola.api import Suola
         suola = Suola()
         hashed_url = suola("https://www.example.com/path/to/resource?query=123")
-        print(hashed_url)  # Outputs the hashed URL
+        print(hashed_url)  # Outputs the hash signature of the normalized URL
     """
 
-    _process_manager: ProcessManager
+    _runtime: WasmRuntime
 
     def __init__(self, wasm_module: Path | str | None = None):
         """
-        Initialize the Suola API with the WASI module.
+        Initialize the Suola API with WASM runtime.
 
         :param wasm_module: Optional path to the WASI module. If not provided, it will be automatically located.
         """
-        if wasm_module is None:
-            # Automatically locate the WASI module
-            wasm_module = get_wasi_module()
-            logger.debug("Using located WASI module at: %r", wasm_module)
-
-        self._process_manager = ProcessManager(["wasmtime", str(wasm_module)])
-        # Wait for ready signal from the WASI module
-        with self._process_manager._buffer_lock:
-            logger.debug("Waiting for WASI module to be ready...")
-            while self._process_manager.is_running():
-                stdout, stderr = self._process_manager._read_output(self._process_manager.timeout)  # Read output to avoid blocking
-                logger.debug("WASI module output: %s", stdout)
-                logger.debug("WASI module error: %s", stderr)
-                if "Waiting." in "\n".join(stderr):
-                    logger.debug("WASI module is waiting for input")
-                    break
-
+        if wasm_module is not None:
+            wasm_module = Path(wasm_module)
+        
+        self._runtime = WasmRuntime(wasm_module)
+        logger.debug("Suola API initialized with WASM runtime")
 
     def __call__(self, url: str) -> str:
         """
-        Hash a URL using the WASI module.
+        Hash a URL using the WASM runtime.
+
         :param url: The URL to normalize and hash
         :return: The hashed URL
         """
         url = str(url).strip()
         if not url:
             raise ValueError("URL cannot be empty")
-        return self._process_manager.__call__(url)
+        return self._runtime.get_signature(url)
 
 if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.DEBUG)
     logger.info("Starting Suola API example")
     suola = Suola()
+    
+    test_urls = [
+        "https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b",
+        "https://www.iltalehti.fi/politiikka/a/4427e983-993e-4a4a-aeb4-531f9e9f7d7a",
+        "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80",
+    ]
+    
+    print("\nProcessing URLs:")
+    for i, url in enumerate(test_urls, 1):
+        try:
+            result = suola(url)
+            print(f"{i}. {result}")
+        except Exception as e:
+            print(f"{i}. Error: {e}")
+    
+    print("\nTesting error handling:")
     try:
-        result = suola("https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b")
-        print(f"Hashed URL: {result}")
-        print(suola("http://www.example.com/path/to/resource?query=123"))
-        print(suola("https://www.iltalehti.fi/politiikka/a/4427e983-993e-4a4a-aeb4-531f9e9f7d7a"))
-    except NotImplementedError as e:
-        print(f"Error: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+        suola("")
+    except ValueError as e:
+        print(f"✓ Empty URL rejected: {e}")

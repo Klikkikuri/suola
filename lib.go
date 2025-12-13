@@ -189,8 +189,8 @@ func generateSignature(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-//export GetSignature
-func GetSignature(inputURL string) (string, error) {
+// Get signature for a given URL.
+func getSignature(inputURL string) (string, error) {
 	formattedURL, err := processURL(inputURL)
 	if err != nil {
 		fmt.Println("Error:", err)
