@@ -29,6 +29,10 @@ COPY . .
 
 CMD ["/bin/bash", "-c", "make build-wasm"]
 
+FROM builder AS cli
+
+ENTRYPOINT ["go", "run", "."]
+
 ## Test stage
 ## ==========
 FROM wasm-builder AS test
