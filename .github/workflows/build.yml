@@ -43,7 +43,7 @@ jobs:
 
       - name: "🏗️ Build wasm modules (in Docker container)"
         run: |
-          docker build --target builder -t app-builder .
+          docker build --target wasm-builder -t wasm-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
@@ -57,12 +57,19 @@ jobs:
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
-      - name: "🧪 Run tests (in Docker container)"
+      - name: "🧪 Run Go tests (in Docker container)"
         run: |
           docker build --target test -t test-runner .
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
             test-runner
+
+      - name: "🧪 Run Python tests (in Docker container)"
+        run: |
+          docker build --target python-test -t python-test-runner .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-test-runner
 
       # Setup go for svu
       # svu is used to manage semantic versioning
