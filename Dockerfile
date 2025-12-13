@@ -1,9 +1,6 @@
 # NOTICE: When updating base images, make sure they use the same base image (i.e. debian bookworm)
 ARG GO_VERSION=1.25
 
-# Wasmtime installation directory
-ARG WASMTIME_HOME=/usr/local/wasmtime
-
 # Python interface
 ARG UV_VERSION=0.5.20
 ARG UV_PROJECT_ENVIRONMENT=/app/python/.venv/
@@ -35,10 +32,6 @@ CMD ["/bin/bash", "-c", "make build-wasm"]
 ## Test stage
 ## ==========
 FROM wasm-builder AS test
-
-ARG WASMTIME_HOME
-ENV WASMTIME_HOME=$WASMTIME_HOME
-ENV PATH=$PATH:${WASMTIME_HOME}/bin
 
 CMD ["/bin/bash", "-c", "make test"]
 
@@ -118,12 +111,6 @@ ENV UV_LINK_MODE=copy
 
 # Create and change to the app directory.
 WORKDIR /app
-
-# Copy wasmtime from the test stage
-ARG WASMTIME_HOME
-ENV WASMTIME_HOME=${WASMTIME_HOME}
-COPY --from=test ${WASMTIME_HOME} ${WASMTIME_HOME}
-COPY --from=test /etc/profile.d/wasmtime.sh /etc/profile.d/wasmtime.sh
 
 COPY --from=wasm-builder --chown=1000:1000 /go /go
 COPY --from=wasm-builder --chown=1000:1000 /app /app
