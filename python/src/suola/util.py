@@ -1,3 +1,9 @@
+"""
+Utility functions for package metadata and platform directories.
+
+todo: Move to a separate utility package in the future.
+"""
+
 from collections import namedtuple
 import importlib.metadata
 import logging
