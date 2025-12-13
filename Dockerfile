@@ -40,21 +40,6 @@ ARG WASMTIME_HOME
 ENV WASMTIME_HOME=$WASMTIME_HOME
 ENV PATH=$PATH:${WASMTIME_HOME}/bin
 
-# Install wasmtime for testing wasi
-# Install xz-utils for extracting the wasmtime tarball
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && \
-    apt-get install -y --no-install-recommends xz-utils
-
-ADD https://wasmtime.dev/install.sh /tmp/install-wasmtime.sh
-RUN chmod +x /tmp/install-wasmtime.sh && \
-    echo "Installing wasmtime to ${WASMTIME_HOME}" && \
-    /tmp/install-wasmtime.sh --version v33.0.0 && \
-    echo "export PATH=\$PATH:${WASMTIME_HOME}/bin" >> /etc/profile.d/wasmtime.sh && \
-    chmod +x /etc/profile.d/wasmtime.sh && \
-    rm -f /tmp/install-wasmtime.sh
-
 CMD ["/bin/bash", "-c", "make test"]
 
 ## Python stage
@@ -98,6 +83,27 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy build objects
 COPY --from=wasm-builder . .
 CMD ["/bin/bash", "-c", "make build-wasm"]
+
+
+## Python Test stage
+## =================
+FROM python-builder AS python-test
+
+ARG UV_PROJECT_ENVIRONMENT \
+    PYTHON_VERSION
+
+ENV UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT} \
+    PATH="${UV_PROJECT_ENVIRONMENT}/bin:${PATH}"
+
+COPY . /app/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync \
+        --directory /app/python \
+        --group test
+
+CMD ["/bin/bash", "-c", "uv run --directory /app/python pytest -v"]
+
 
 ## Development stage
 ## =================

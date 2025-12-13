@@ -56,6 +56,7 @@ source = "vcs"
 
 [tool.hatch.version.raw-options]
 root = "../"
+fallback_version = "0.0.0+unknown"
 
 [tool.hatch.build.targets.sdist]
 include = [
