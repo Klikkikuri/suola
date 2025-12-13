@@ -1,3 +1,13 @@
+
+# YAML rules for canonical URL generation for news websites.
+# When adding rules, ensure to include possibility of query parameters. Example:
+#   - /path/to/article?utm_source=google"
+#   - /path/to/article/
+#   - /path/to/article
+#   - /path/to/article/?ref=homepage
+# The rules should match all these variants and produce the same canonical URL, IF the
+# query parameters are not part of the canonical URL.
+
 sites:
   - domain: aksa.fi
     templates:
@@ -89,3 +99,37 @@ sites:
       - url: https://www.hs.fi/urheilu/art-2000011690526.html
         expected: https://www.hs.fi/urheilu/art-2000011690526.html
         signature: c36813d09cd27e844c29c989a96b787fe754d1f04fb713551c71936f49dcb590
+
+  - domain: svt.se
+    templates:
+      - pattern: "^/nyheter/lokalt/(?P<Region>[^/]+)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyheter/lokalt/{{ .Region }}/{{ .ArticleSlug }}"
+      - pattern: "^/nyheter/(?P<Category>inrikes|utrikes)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyheter/{{ .Category }}/{{ .ArticleSlug }}"
+      - pattern: "^/nyhetskoll/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyhetskoll/{{ .ArticleSlug }}"
+    tests:
+      - url: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        expected: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        signature: cca1350870598af7498cfca7caf025865ad3a652fc41ad53173749f91e01c23a
+      - url: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre?utm_source=rss
+        expected: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        signature: cca1350870598af7498cfca7caf025865ad3a652fc41ad53173749f91e01c23a
+      - url: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        expected: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        signature: de47201890cca65fdabc41bdc3e088b9e85cb53f162da96fe92b439a6850fe98
+      - url: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va?ref=homepage
+        expected: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        signature: de47201890cca65fdabc41bdc3e088b9e85cb53f162da96fe92b439a6850fe98
+      - url: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        expected: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        signature: de55cb987475b4defabe713f25c26b8806515eada23c42b4cb24218e4ad0e080
+      - url: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university?utm_source=social&utm_medium=facebook
+        expected: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        signature: de55cb987475b4defabe713f25c26b8806515eada23c42b4cb24218e4ad0e080
+      - url: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar/
+        expected: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar
+        signature: d7a82dc45caff0fd78b872466019f870da3c2dcf9ded4e561547b6fc54508771
+      - url: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar?utm_source=email
+        expected: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar
+        signature: d7a82dc45caff0fd78b872466019f870da3c2dcf9ded4e561547b6fc54508771
