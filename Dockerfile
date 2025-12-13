@@ -1,5 +1,5 @@
 # NOTICE: When updating base images, make sure they use the same base image (i.e. debian bookworm)
-ARG GO_VERSION=1.24
+ARG GO_VERSION=1.25
 
 # Wasmtime installation directory
 ARG WASMTIME_HOME=/usr/local/wasmtime
@@ -101,7 +101,7 @@ CMD ["/bin/bash", "-c", "make build-wasm"]
 
 ## Development stage
 ## =================
-FROM mcr.microsoft.com/devcontainers/go:1-${GO_VERSION}-bookworm AS devcontainer
+FROM mcr.microsoft.com/devcontainers/go:2-${GO_VERSION}-bookworm AS devcontainer
 
 ARG UV_VERSION \
     UV_PROJECT_ENVIRONMENT \
