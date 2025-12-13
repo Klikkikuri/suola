@@ -101,37 +101,42 @@ class WasmRuntime:
         if url_ptr == 0:
             raise RuntimeError("Failed to allocate memory in WASM")
         
-        # Get memory size to validate bounds
-        memory_size = self.memory.data_len(self.store)
-        if url_ptr + url_len > memory_size:
-            raise RuntimeError(f"Memory overflow: ptr={url_ptr}, len={url_len}, memory_size={memory_size}")
-        
-        # Write URL to WASM memory using ctypes.memmove
-        memory_data = self.memory.data_ptr(self.store)
-        ptr_type = ctypes.c_ubyte * url_len
-        src_ptr = ptr_type.from_buffer_copy(url_bytes)
-        ctypes.memmove(ctypes.addressof(memory_data.contents) + url_ptr, src_ptr, url_len)
-        
-        # Call GetSignature
-        result = self.get_signature_fn(self.store, url_ptr, url_len)
-        
-        # Unpack result: high 32 bits = pointer, low 32 bits = length
-        sig_ptr = (result >> 32) & 0xFFFFFFFF
-        sig_len = result & 0x7FFFFFFF  # Mask out error bit
-        is_error = (result & 0x80000000) != 0
+        try:
+            # Get memory size to validate bounds
+            memory_size = self.memory.data_len(self.store)
+            if url_ptr + url_len > memory_size:
+                raise RuntimeError(f"Memory overflow: ptr={url_ptr}, len={url_len}, memory_size={memory_size}")
+            
+            # Write URL to WASM memory using ctypes.memmove
+            memory_data = self.memory.data_ptr(self.store)
+            ptr_type = ctypes.c_ubyte * url_len
+            src_ptr = ptr_type.from_buffer_copy(url_bytes)
+            ctypes.memmove(ctypes.addressof(memory_data.contents) + url_ptr, src_ptr, url_len)
+            
+            # Call GetSignature
+            result = self.get_signature_fn(self.store, url_ptr, url_len)
+            
+            # Unpack result: high 32 bits = pointer, low 32 bits = length
+            sig_ptr = (result >> 32) & 0xFFFFFFFF
+            sig_len = result & 0x7FFFFFFF  # Mask out error bit
+            is_error = (result & 0x80000000) != 0
 
-        # Validate result bounds before reading
-        if sig_ptr != 0 and sig_len > 0:
-            if sig_ptr + sig_len > memory_size:
-                raise RuntimeError(f"Result overflow: ptr={sig_ptr}, len={sig_len}, memory_size={memory_size}")
-        
-        # Read result from WASM memory using bytes() constructor directly on slice
-        result_str = bytes(memory_data[sig_ptr:sig_ptr + sig_len]).decode('utf-8')
-        
-        if is_error:
-            raise RuntimeError(f"WASM error: {result_str}")
-        
-        return result_str
+            # Validate result bounds before reading
+            if sig_ptr != 0 and sig_len > 0:
+                if sig_ptr + sig_len > memory_size:
+                    raise RuntimeError(f"Result overflow: ptr={sig_ptr}, len={sig_len}, memory_size={memory_size}")
+            
+            # Read result from WASM memory using bytes() constructor directly on slice
+            result_str = bytes(memory_data[sig_ptr:sig_ptr + sig_len]).decode('utf-8')
+            
+            if is_error:
+                raise RuntimeError(f"WASM error: {result_str}")
+            
+            return result_str
+        finally:
+            # Free only the input buffer allocated by Malloc
+            # Note: sig_ptr is managed by Go's memory pool and should NOT be freed here
+            self.free_fn(self.store, url_ptr)
 
 
 if __name__ == "__main__":
