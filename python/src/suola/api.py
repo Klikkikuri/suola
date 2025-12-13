@@ -29,7 +29,7 @@ class Suola(SuolaAPI):
 
     This class uses a WASI module to hash URLs. It initializes the WASI environment and provides
     a callable interface to hash URLs. It uses wasmtime for executing the WASI module.
-sage::
+Usage::
     Example usage:
     .. code-block:: python
 

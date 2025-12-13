@@ -192,7 +192,7 @@ class ProcessManager:
 
                 if stdout:
                     return "\n".join(stdout)
-                logger.warning("No output received from daemon")
+                self.logger.warning("No output received from daemon")
                 return ""
 
         except Exception as e:
