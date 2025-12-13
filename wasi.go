@@ -168,7 +168,22 @@ func Free(ptr uint32) {
 }
 
 func main() {
-	if err := LoadRules(DefaultCfgData); err != nil {
+	var rulesData []byte
+	var err error
+
+	// Check if custom rules path is provided via argv
+	// argv[0] is the program name, argv[1] would be the custom rules path
+	if len(os.Args) > 1 {
+		customRulesPath := os.Args[1]
+		fmt.Fprintf(os.Stderr, "[🧂 suola]: Loading custom rules from: %s\n", customRulesPath)
+		rulesData = mustReadConfig(customRulesPath)
+	} else {
+		// Use embedded default rules
+		fmt.Fprintln(os.Stderr, "[🧂 suola]: Using embedded default rules.")
+		rulesData = DefaultCfgData
+	}
+
+	if err = LoadRules(rulesData); err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal: %v\n", err)
 		os.Exit(1)
 	}

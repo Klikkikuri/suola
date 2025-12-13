@@ -42,7 +42,7 @@ class WasmRuntime:
     malloc_fn: wasmtime.Func
     free_fn: wasmtime.Func
 
-    def __init__(self, wasm_path: Optional[Path] = None):
+    def __init__(self, wasm_path: Optional[Path] = None, custom_rules_path: Optional[Path] = None):
         if wasm_path is None:
             wasm_path = get_wasi_module()
 
@@ -57,6 +57,25 @@ class WasmRuntime:
         # Create store with WASI context
         wasi = wasmtime.WasiConfig()
         wasi.inherit_stderr()  # For debug messages
+        
+        # If custom rules path is provided, pass it as argv to the WASM module
+        if custom_rules_path is not None:
+            custom_rules_path = Path(custom_rules_path).resolve()
+            if not custom_rules_path.exists():
+                raise FileNotFoundError(f"Custom rules file not found: {custom_rules_path}")
+            
+            # Preopen the directory containing the custom rules file so WASI can access it
+            # This is required because WASI has a capability-based security model
+            # TODO: Make this more secure by only preopening the specific file if possible
+            rules_dir = custom_rules_path.parent
+            wasi.preopen_dir(str(rules_dir), str(rules_dir))
+            logger.debug("Preopened directory: %s", rules_dir)
+            
+            # Set argv with program name (argv[0]) and custom rules path (argv[1])
+            # The WASM module's main() will receive this as os.Args
+            wasi.argv = ["suola.wasm", str(custom_rules_path)]
+            logger.debug("Custom rules path set to: %s", custom_rules_path)
+        
         self.store = wasmtime.Store(self.engine)
         self.store.set_wasi(wasi)
         

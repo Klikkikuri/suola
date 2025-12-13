@@ -39,17 +39,24 @@ class Suola(SuolaAPI):
 
     _runtime: WasmRuntime
 
-    def __init__(self, wasm_module: Path | str | None = None):
+    def __init__(self, wasm_module: Path | str | None = None, custom_rules: Path | str | None = None):
         """
         Initialize the Suola API with WASM runtime.
 
         :param wasm_module: Optional path to the WASI module. If not provided, it will be automatically located.
+        :param custom_rules: Optional path to a custom YAML rules file. If not provided, uses embedded default rules.
         """
         if wasm_module is not None:
             wasm_module = Path(wasm_module)
         
-        self._runtime = WasmRuntime(wasm_module)
-        logger.debug("Suola API initialized with WASM runtime")
+        if custom_rules is not None:
+            custom_rules = Path(custom_rules)
+        
+        self._runtime = WasmRuntime(wasm_module, custom_rules)
+        if custom_rules:
+            logger.debug("Suola API initialized with custom rules: %s", custom_rules)
+        else:
+            logger.debug("Suola API initialized with default embedded rules")
 
     def __call__(self, url: str) -> str | None:
         """
@@ -72,6 +79,9 @@ if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.DEBUG)
     logger.info("Starting Suola API example")
+    
+    # Example 1: Using default embedded rules
+    print("\n=== Example 1: Using Default Embedded Rules ===")
     suola = Suola()
     
     test_urls = [
@@ -88,6 +98,21 @@ if __name__ == "__main__":
             print(f"{i}. {result}")
         except Exception as e:
             print(f"{i}. Error: {e}")
+    
+    # Example 2: Using custom rules
+    print("\n=== Example 2: Using Custom Rules ===")
+    from pathlib import Path
+    custom_rules_path = Path(__file__).parent.parent.parent.parent / "test_custom_rules.yaml"
+    if custom_rules_path.exists():
+        suola_custom = Suola(custom_rules=custom_rules_path)
+        print(f"Initialized with custom rules: {custom_rules_path}")
+        try:
+            result = suola_custom("https://example.com/article/12345?utm_source=test")
+            print(f"Custom rules result: {result}")
+        except Exception as e:
+            print(f"Error with custom rules: {e}")
+    else:
+        print(f"Custom rules file not found at: {custom_rules_path}")
     
     print("\nTesting error handling:")
     try:

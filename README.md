@@ -85,6 +85,31 @@ Run the WASI module using a compatible runtime. Example:
 echo "https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880" | wasmtime build/wasi.wasm
 ```
 
+To use custom rules with the WASI module, pass the path to your custom rules file as the first argument:
+
+```sh
+echo "https://example.com/article/123" | wasmtime build/wasi.wasm -- /path/to/custom_rules.yaml
+```
+
+### Python Usage
+
+The Python interface supports loading custom rules at runtime:
+
+```python
+from suola._wasm import WasmRuntime
+from pathlib import Path
+
+# Use default embedded rules
+runtime = WasmRuntime()
+signature = runtime.get_signature("https://example.com/article")
+
+# Use custom rules file
+runtime_custom = WasmRuntime(custom_rules_path=Path("/path/to/custom_rules.yaml"))
+signature = runtime_custom.get_signature("https://example.com/article")
+```
+
+**Note:** The custom rules file must be accessible to the WASI module. The Python interface automatically handles directory preopening for file access.
+
 ### CLI Example / native Go
 
 You can test the module directly using the Go CLI:
