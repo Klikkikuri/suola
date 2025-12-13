@@ -51,17 +51,22 @@ class Suola(SuolaAPI):
         self._runtime = WasmRuntime(wasm_module)
         logger.debug("Suola API initialized with WASM runtime")
 
-    def __call__(self, url: str) -> str:
+    def __call__(self, url: str) -> str | None:
         """
         Hash a URL using the WASM runtime.
 
         :param url: The URL to normalize and hash
-        :return: The hashed URL
+        :return: The hashed URL or None if an error occurs
         """
         url = str(url).strip()
         if not url:
             raise ValueError("URL cannot be empty")
-        return self._runtime.get_signature(url)
+        try:
+            hash = self._runtime.get_signature(url)
+            return hash
+        except Exception as e:
+            logger.error(f"Error hashing URL: {e}")
+        return None
 
 if __name__ == "__main__":
     # Example usage
@@ -72,6 +77,7 @@ if __name__ == "__main__":
     test_urls = [
         "https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b",
         "https://www.iltalehti.fi/politiikka/a/4427e983-993e-4a4a-aeb4-531f9e9f7d7a",
+        "http://www.example.com/path/to/resource?query=123",
         "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80",
     ]
     
