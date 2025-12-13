@@ -23,6 +23,8 @@ func TestExtractionRules(t *testing.T) {
 
 				if test.Signature != "" {
 					hashed = generateSignature(resUrl)
+				} else {
+					t.Logf("⚠️ No signature to test for: %s\n", test.Url)
 				}
 				if err != nil || resUrl != test.Expected {
 					t.Fatalf("❌ Test failed for: %s\nExpected: %s\nGot: %s\nError: %v\n\n",
