@@ -10,7 +10,7 @@ sites:
 
   - domain: iltalehti.fi
     templates:
-      - pattern: "/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
+      - pattern: "^/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
         template: "https://www.iltalehti.fi/{{ .Section }}/a/{{ .ArticleID }}"
         transform:
           Section: "lowercase"
@@ -31,6 +31,10 @@ sites:
       - url: https://www.is.fi/tyyli/art-2000011677707.html
         expected: https://www.is.fi/tyyli/art-2000011677707.html
         signature: 4d8ec582a49f6622ea35ceb6508815f78c1834ce2dbae622cd12f3dfad7129f6
+      - url: https://www.is.fi/tyyli/art-2000011677707.html?utm_source=fb&utm_medium=social&utm_campaign=share
+        expected: https://www.is.fi/tyyli/art-2000011677707.html
+        signature: 4d8ec582a49f6622ea35ceb6508815f78c1834ce2dbae622cd12f3dfad7129f6
+
 
   - domain: mtvuutiset.fi
     templates:
@@ -51,3 +55,34 @@ sites:
         expected: https://yle.fi/a/74-20194304
         signature: f0f7af3fb1130daa54674b37f55c16cc647b871b93aadf919531416790565487
 
+  - domain: faktabaari.fi
+    templates:
+      - pattern: "^/fakta/(?P<ArticleSlug>[^/]+)/?"
+        template: "https://faktabaari.fi/fakta/{{ .ArticleSlug }}/"
+      - pattern: "^/nakokulmat/(?P<OpinionSlug>[^/]+)/?"
+        template: "https://faktabaari.fi/nakokulmat/{{ .OpinionSlug }}/"
+    tests:
+      - url: https://faktabaari.fi/fakta/myytti-eu-alistaa-jasenvaltiot/
+        expected: https://faktabaari.fi/fakta/myytti-eu-alistaa-jasenvaltiot/
+        signature: d1cd5a2d3bf3b51c58031bb153e58e3e6247e0bcb850a05c89dcf00faa3d17b8
+      - url: https://faktabaari.fi/fakta/sveitsi-norja-menestyvat-eu-ulkopuolella/
+        expected: https://faktabaari.fi/fakta/sveitsi-norja-menestyvat-eu-ulkopuolella/
+        signature: c563acc599f2d46650dc1c9db8d01aff4ebe536cdab0fc3325855a9209cec5a2
+      - url: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        expected: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        signature: b12e7148965241984caa35c0492d9a12fe04e0936aab923c6b917d285e44c03e
+      - url: https://faktabaari.fi/nakokulmat/tervetuloa/
+        expected: https://faktabaari.fi/nakokulmat/tervetuloa/
+        signature: 2267c883a2b056dac031b1ca4f684384299363c407344da084460c045e0c0bdc
+
+  - domain: hs.fi
+    templates:
+      - pattern: "^/(?P<Section>[^/]+)/art-(?P<ArticleID>[^/]+).html"
+        template: "https://www.hs.fi/{{ .Section }}/art-{{ .ArticleID }}.html"
+    tests:
+      - url: https://www.hs.fi/politiikka/art-2000011689981.html
+        expected: https://www.hs.fi/politiikka/art-2000011689981.html
+        signature: a3d65efdf3ecf6d6400d78e0c64b9578acc769563ebf4a2398f425b024443ea1
+      - url: https://www.hs.fi/urheilu/art-2000011690526.html
+        expected: https://www.hs.fi/urheilu/art-2000011690526.html
+        signature: c36813d09cd27e844c29c989a96b787fe754d1f04fb713551c71936f49dcb590
