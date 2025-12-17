@@ -39,6 +39,7 @@ FROM wasm-builder AS test
 
 CMD ["/bin/bash", "-c", "make test"]
 
+
 ## Python stage
 ## ============
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
@@ -61,6 +62,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         make \
+        git \
         python${PYTHON_VERSION} \
         python${PYTHON_VERSION}-venv
 
@@ -77,9 +79,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --python "/usr/bin/python${PYTHON_VERSION}" \
         "${UV_PROJECT_ENVIRONMENT}"
 
+COPY . .
+
 # Copy build objects
-COPY --from=wasm-builder . .
-CMD ["/bin/bash", "-c", "make build-wasm"]
+COPY --from=wasm-builder /app/build /app/build
+
+CMD ["/bin/bash", "-c", "make build-python"]
 
 
 ## Python Test stage
@@ -92,7 +97,7 @@ ARG UV_PROJECT_ENVIRONMENT \
 ENV UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT} \
     PATH="${UV_PROJECT_ENVIRONMENT}/bin:${PATH}"
 
-COPY . /app/
+COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync \

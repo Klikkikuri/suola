@@ -11,7 +11,7 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 on:
   push:
     branches:
-      - '**'
+      - 'main'
 
   pull_request:
     branches: 
