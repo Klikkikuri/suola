@@ -81,8 +81,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         "${UV_PROJECT_ENVIRONMENT}"
 
 # Copy build objects
-COPY --from=wasm-builder . .
-CMD ["/bin/bash", "-c", "make build-wasm"]
+COPY . .
+
+COPY --from=wasm-builder ./build ./build
+
+RUN find . -type f;
+
+CMD ["/bin/bash", "-c", "make build-python"]
 
 
 ## Python Test stage
@@ -95,7 +100,7 @@ ARG UV_PROJECT_ENVIRONMENT \
 ENV UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT} \
     PATH="${UV_PROJECT_ENVIRONMENT}/bin:${PATH}"
 
-COPY . /app/
+COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync \
