@@ -70,6 +70,8 @@ This will generate the following files in the `build/` directory:
 
 - `js.wasm`: WebAssembly module for browser environments.
 - `wasi.wasm`: WebAssembly module for WASI environments.
+- `suola.js`: go javascript support file from go distribution.
+- `suola-*.whl`: Python wheels package, containing python support files and `wasi.wasm`.
 
 ## Usage
 
@@ -79,17 +81,26 @@ Include the `js.wasm` file in your web application. Refer to the `build/suola.js
 
 ### WASI Environment
 
-Run the WASI module using a compatible runtime. Example:
+The WASI module (`wasi.wasm`) can be used in WASI-compatible runtimes, such as [Wasmtime](https://wasmtime.dev/), or embedded in other languages (e.g., Python, Rust) that support WASI.
 
-```sh
-echo "https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880" | wasmtime build/wasi.wasm
-```
+#### WASI API
 
-To use custom rules with the WASI module, pass the path to your custom rules file as the first argument:
+The WASI module exports the following functions for host integration:
 
-```sh
-echo "https://example.com/article/123" | wasmtime build/wasi.wasm -- /path/to/custom_rules.yaml
-```
+- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. Memory is managed by a slab allocator. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
+- `Free(ptr uint32)`: Frees a buffer previously allocated with `Malloc`. Only call this for your own input buffers, not for result pointers.
+- `GetSignature(urlPtr uint32, urlLen uint32) uint64`: Processes a URL string at the given pointer and length. Returns __a packed `uint64`__:
+  - High 32 bits: pointer to the result string (signature or error message)
+  - Low 32 bits: length of the result string
+  - Bit 31 of the low 32 bits: error flag (1 = error, 0 = success)
+
+**Memory Management:**
+- Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use.
+- Do **not** free the result pointer from `GetSignature` — it is managed by the slab allocator.
+
+**Error Handling:**
+- If the error bit (bit 31) in the returned length is set, the result pointer points to an error message string.
+- Otherwise, the result pointer points to the signature string (64 hex characters).
 
 ### Python Usage
 
@@ -115,7 +126,7 @@ signature = runtime_custom.get_signature("https://example.com/article")
 You can test the module directly using the Go CLI:
 
 ```sh
-go run . -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
+go run lib.go cli.go -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
 ```
 
 ## License
