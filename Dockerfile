@@ -22,6 +22,8 @@ RUN --mount=type=bind,source=go.mod,target=go.mod \
 # Copy local code to the container image.
 COPY . .
 
+RUN find . -type f;
+
 # Build the binary.
 
 # To be considered; Should we add the rules.yaml file a remote repo?
@@ -38,6 +40,7 @@ ENTRYPOINT ["go", "run", "."]
 FROM wasm-builder AS test
 
 CMD ["/bin/bash", "-c", "make test"]
+
 
 ## Python stage
 ## ============
