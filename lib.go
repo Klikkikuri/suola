@@ -74,7 +74,7 @@ func LoadRules(data []byte) error {
 	// Compile regex and parse templates
 	for i := range cfg.Sites {
 		for j := range cfg.Sites[i].Templates {
-			tmpl, err := template.New("urlTemplate").Parse(cfg.Sites[i].Templates[j].Template)
+			tmpl, err := template.New("urlTemplate").Option("missingkey=zero").Parse(cfg.Sites[i].Templates[j].Template)
 			if err != nil {
 				return fmt.Errorf("parsing template for domain %s: %w", cfg.Sites[i].Domain, err)
 			}
@@ -107,6 +107,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 	// Extract using regex
 	if rule._Regex != nil {
 		matches := rule._Regex.FindStringSubmatch(u.Path)
+
 		if matches == nil {
 			fmt.Printf("No matches found in path '%s' for pattern '%s'\n", u.Path, rule._Regex.String())
 		} else {
@@ -144,6 +145,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 // Format the extracted fields into the final URL
 func formatURL(u *url.URL, rule TemplateRule, fields map[string]string) (string, error) {
 	var output strings.Builder
+
 	if err := rule._Template.Execute(&output, fields); err != nil {
 		return "", fmt.Errorf("executing template: %w", err)
 	}
@@ -173,6 +175,7 @@ func processURL(inputURL string) (string, error) {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
 					fields, err := extractFields(parsed, rule)
 					if err != nil {
+						fmt.Println("Error:", err)
 						continue
 					}
 					return formatURL(parsed, rule, fields)
@@ -189,8 +192,8 @@ func generateSignature(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-//export GetSignature
-func GetSignature(inputURL string) (string, error) {
+// Get signature for a given URL.
+func getSignature(inputURL string) (string, error) {
 	formattedURL, err := processURL(inputURL)
 	if err != nil {
 		fmt.Println("Error:", err)

@@ -1,13 +1,135 @@
+
+# YAML rules for canonical URL generation for news websites.
+# When adding rules, ensure to include possibility of query parameters. Example:
+#   - /path/to/article?utm_source=google"
+#   - /path/to/article/
+#   - /path/to/article
+#   - /path/to/article/?ref=homepage
+# The rules should match all these variants and produce the same canonical URL, IF the
+# query parameters are not part of the canonical URL.
+
 sites:
+  - domain: aksa.fi
+    templates:
+      - pattern: "^/(?P<ArticleTitle>[^/]+)/{0,1}?"
+        template: "https://aksa.fi/{{ .ArticleTitle }}"
+    tests:
+      - url: https://aksa.fi/aanekosken-keilailuliiton-mestaruudet-on-ratkottu-aanekoskella-ja-saarijarvella-maailmanmestaruudet-hong-kongissa/
+        expected: https://aksa.fi/aanekosken-keilailuliiton-mestaruudet-on-ratkottu-aanekoskella-ja-saarijarvella-maailmanmestaruudet-hong-kongissa
+        signature: 992b74d32c98df49159acffa299ab51a6d1f24b368e08860f29f06c14419ae08
+
   - domain: iltalehti.fi
     templates:
-      - pattern: "/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
+      - pattern: "^/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)"
         template: "https://www.iltalehti.fi/{{ .Section }}/a/{{ .ArticleID }}"
         transform:
           Section: "lowercase"
-
     tests:
       - url: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
         expected: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
-        sign: 7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c
+        signature: 7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c
 
+  - domain: is.fi
+    templates:
+      # NOTE: The MaybeOutlet should contain the leading slash / when inserted to the template.
+      - pattern: "(?P<MaybeOutlet>^/[^/]+)?/(?P<Section>[^/]+)/(?P<ArticleDocument>[^/]+)"
+        template: "https://www.is.fi{{ .MaybeOutlet }}/{{ .Section }}/{{ .ArticleDocument }}"
+    tests:
+      - url: https://www.is.fi/menaiset/tyyli/art-2000011677707.html
+        expected: https://www.is.fi/menaiset/tyyli/art-2000011677707.html
+        signature: fc027d5345edac805d60218db44e087c046592c10d6988262bcc2556f276633e
+      - url: https://www.is.fi/tyyli/art-2000011677707.html
+        expected: https://www.is.fi/tyyli/art-2000011677707.html
+        signature: 4d8ec582a49f6622ea35ceb6508815f78c1834ce2dbae622cd12f3dfad7129f6
+      - url: https://www.is.fi/tyyli/art-2000011677707.html?utm_source=fb&utm_medium=social&utm_campaign=share
+        expected: https://www.is.fi/tyyli/art-2000011677707.html
+        signature: 4d8ec582a49f6622ea35ceb6508815f78c1834ce2dbae622cd12f3dfad7129f6
+
+
+  - domain: mtvuutiset.fi
+    templates:
+      # NOTE: The MaybeSection should contain the leading slash / when inserted to the template.
+      - pattern: "(?P<MaybeSection>^/[^/]+)?/artikkeli/(?P<ArticleTitle>[^/]+)/(?P<ArticleID>[^/]+)"
+        template: "https://www.mtvuutiset.fi{{ .MaybeSection }}/artikkeli/{{ .ArticleTitle }}/{{ .ArticleID }}"
+    tests:
+      - url: https://www.mtvuutiset.fi/artikkeli/spermaskandaali-paisuu-euroopassa/9268218
+        expected: https://www.mtvuutiset.fi/artikkeli/spermaskandaali-paisuu-euroopassa/9268218
+        signature: 61861193e02d89b0176a88aa0c3473d29c4742522a59d4111f08dcd5e3f6417c
+
+  - domain: yle.fi
+    templates:
+      - pattern: "/(uutiset|a)(/lyhyesti)?/(?P<ArticleID>[^/]+)"
+        template: "https://yle.fi/a/{{ .ArticleID }}"
+    tests:
+      - url: https://yle.fi/uutiset/lyhyesti/74-20194304
+        expected: https://yle.fi/a/74-20194304
+        signature: f0f7af3fb1130daa54674b37f55c16cc647b871b93aadf919531416790565487
+
+  - domain: faktabaari.fi
+    templates:
+      - pattern: "^/fakta/(?P<ArticleSlug>[^/]+)(?:/)?$"
+        template: "https://faktabaari.fi/fakta/{{ .ArticleSlug }}/"
+      - pattern: "^/nakokulmat/(?P<OpinionSlug>[^/]+)(?:/)?$"
+        template: "https://faktabaari.fi/nakokulmat/{{ .OpinionSlug }}/"
+    tests:
+      - url: https://faktabaari.fi/fakta/myytti-eu-alistaa-jasenvaltiot/
+        expected: https://faktabaari.fi/fakta/myytti-eu-alistaa-jasenvaltiot/
+        signature: d1cd5a2d3bf3b51c58031bb153e58e3e6247e0bcb850a05c89dcf00faa3d17b8
+      - url: https://faktabaari.fi/fakta/sveitsi-norja-menestyvat-eu-ulkopuolella/
+        expected: https://faktabaari.fi/fakta/sveitsi-norja-menestyvat-eu-ulkopuolella/
+        signature: c563acc599f2d46650dc1c9db8d01aff4ebe536cdab0fc3325855a9209cec5a2
+      - url: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        expected: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        signature: b12e7148965241984caa35c0492d9a12fe04e0936aab923c6b917d285e44c03e
+      - url: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua?utm_source=test
+        expected: https://faktabaari.fi/nakokulmat/faktabaari-korkeatasoista-julkista-eu-keskustelua/
+        signature: b12e7148965241984caa35c0492d9a12fe04e0936aab923c6b917d285e44c03e
+      - url: https://faktabaari.fi/nakokulmat/tervetuloa/
+        expected: https://faktabaari.fi/nakokulmat/tervetuloa/
+        signature: 2267c883a2b056dac031b1ca4f684384299363c407344da084460c045e0c0bdc
+
+  - domain: hs.fi
+    templates:
+      - pattern: "^/(?P<Section>[^/]+)/art-(?P<ArticleID>[^/]+).html"
+        template: "https://www.hs.fi/{{ .Section }}/art-{{ .ArticleID }}.html"
+    tests:
+      - url: https://www.hs.fi/politiikka/art-2000011689981.html
+        expected: https://www.hs.fi/politiikka/art-2000011689981.html
+        signature: a3d65efdf3ecf6d6400d78e0c64b9578acc769563ebf4a2398f425b024443ea1
+      - url: https://www.hs.fi/urheilu/art-2000011690526.html
+        expected: https://www.hs.fi/urheilu/art-2000011690526.html
+        signature: c36813d09cd27e844c29c989a96b787fe754d1f04fb713551c71936f49dcb590
+
+  - domain: svt.se
+    templates:
+      - pattern: "^/nyheter/lokalt/(?P<Region>[^/]+)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyheter/lokalt/{{ .Region }}/{{ .ArticleSlug }}"
+      - pattern: "^/nyheter/(?P<Category>inrikes|utrikes)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyheter/{{ .Category }}/{{ .ArticleSlug }}"
+      - pattern: "^/nyhetskoll/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+        template: "https://www.svt.se/nyhetskoll/{{ .ArticleSlug }}"
+    tests:
+      - url: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        expected: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        signature: cca1350870598af7498cfca7caf025865ad3a652fc41ad53173749f91e01c23a
+      - url: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre?utm_source=rss
+        expected: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
+        signature: cca1350870598af7498cfca7caf025865ad3a652fc41ad53173749f91e01c23a
+      - url: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        expected: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        signature: de47201890cca65fdabc41bdc3e088b9e85cb53f162da96fe92b439a6850fe98
+      - url: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va?ref=homepage
+        expected: https://www.svt.se/nyheter/inrikes/l-etablerade-flyktingar-ska-fa-stanna-lite-kaxigt-va
+        signature: de47201890cca65fdabc41bdc3e088b9e85cb53f162da96fe92b439a6850fe98
+      - url: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        expected: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        signature: de55cb987475b4defabe713f25c26b8806515eada23c42b4cb24218e4ad0e080
+      - url: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university?utm_source=social&utm_medium=facebook
+        expected: https://www.svt.se/nyheter/utrikes/flera-skjutna-vid-brown-university
+        signature: de55cb987475b4defabe713f25c26b8806515eada23c42b4cb24218e4ad0e080
+      - url: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar/
+        expected: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar
+        signature: d7a82dc45caff0fd78b872466019f870da3c2dcf9ded4e561547b6fc54508771
+      - url: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar?utm_source=email
+        expected: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar
+        signature: d7a82dc45caff0fd78b872466019f870da3c2dcf9ded4e561547b6fc54508771

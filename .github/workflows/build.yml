@@ -3,6 +3,7 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 # Details about the workflow:
 # - `Dockerfile` uses multi-stage builds to create a "build", "test", and "devcontainer" stage.
 # - Builds both browser and WASI Wasm modules and uploads them as artifacts.
+# - Builds a Python wheel from wasi build and uploads it as an artifact.
 # - Uses `svu` for automatic semantic versioning and tagging.
 # - Releases are only created on pushes to the main branch.
 # - Tests are run in a containerized environment to ensure consistency. 
@@ -10,11 +11,11 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 on:
   push:
     branches:
-      - main
+      - 'main'
 
   pull_request:
     branches: 
-     - main
+     - '**'
 
 permissions:
   contents: write  # required for creating releases and uploading artifacts
@@ -41,27 +42,46 @@ jobs:
       - name: "🔧 Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
 
-      - name: "🏗️ Build artifacts (in Docker container)"
+      - name: "🏗️ Build wasm modules (in Docker container)"
         run: |
-          docker build --target builder -t app-builder .
+          docker build --target wasm-builder -t wasm-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
-            app-builder
+            wasm-builder
 
-      - name: "🧪 Run tests (in Docker container)"
+      - name: "🏗️ Build python wheel (in Docker container)"
+        run: |
+          docker build --target python-builder -t python-builder .
+          # Run the build entrypoint inside the container
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-builder
+
+      - name: "🧪 Run Go tests (in Docker container)"
         run: |
           docker build --target test -t test-runner .
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
             test-runner
 
+      - name: "🧪 Run Python tests (in Docker container)"
+        run: |
+          docker build --target python-test -t python-test-runner .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-test-runner
+
+      # TODO: run test-wasi, but requires fixing the wasi tests first
+      # - name: "🧪 Run WASI tests (in Docker container)"
+      #   run: ...
+
       # Setup go for svu
       # svu is used to manage semantic versioning
       - name: "🦺 Set up Go"
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
       - name: "📦 Install svu"
         run: go install github.com/caarlos0/svu@v1.12
 
@@ -91,6 +111,7 @@ jobs:
         with:
           name: build-${{ env.version }}
           path: |
+            build/suola-*.whl
             build/*.wasm
             build/wasm_exec.js
 
@@ -100,6 +121,7 @@ jobs:
         with:
           tag_name: ${{ env.version }}
           files: |
+            build/suola-*.whl
             build/*.wasm
             build/wasm_exec.js
           generate_release_notes: true
@@ -110,4 +132,4 @@ jobs:
         if: env.is_release == 'true'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'build/*.wasm, build/wasm_exec.js'
+          subject-path: 'build/*.wasm, build/wasm_exec.js, build/suola-*.whl'

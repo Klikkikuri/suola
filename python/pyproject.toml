@@ -1,0 +1,76 @@
+[project]
+name = "suola"
+dynamic = ["version"]
+description = "Klikkikuri shared URL normalization and hashing WebAssembly module"
+readme = "../README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "platformdirs>=4.3.8",
+    "wasmtime>=39.0.0",
+]
+authors = [
+	{name="Teemu Autto", email="klikkikuri@teemu.rautakuu.org"},
+	{name="Juho Tarkkanen", email="juho.tarkkanen@hotmail.fi"},
+	{name="Taija Kolehmainen", email="taija.s.kolehmainen@jyu.fi"}
+]
+maintainers = [
+    {name="Klikkikuri", email="klikkikuri@protonmail.com"}
+]
+
+[project.urls]
+homepage = "https://github.com/Klikkikuri"
+source = "https://github.com/Klikkikuri/suola"
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.ruff]
+ignore = ["E701"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+test = [
+    "pytest>=8.4.1",
+    "pyyaml>=6.0.3",
+]
+dev = [
+    "black>=25.1.0",
+    "hatch-vcs>=0.5.0",
+    "isort>=6.0.1",
+    "pytest>=8.4.1",
+    "ruff>=0.11.12",
+
+    {include-group = "test"}
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = "../"
+fallback_version = "0.0.0+unknown"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "../build/wasi.wasm",
+    "../README.md",
+    "../LICENSE",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/suola"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"../build/wasi.wasm" = "suola/suola.wasm"
+"../README.md" = "suola/README.md"
+"../LICENSE" = "LICENSE"

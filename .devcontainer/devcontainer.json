@@ -8,17 +8,45 @@
     "workspaceFolder": "/app",
     "mounts": [
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-        "source=${localWorkspaceFolder},target=/app,type=bind"
+        "source=${localWorkspaceFolder},target=/app,type=bind",
+		// Anonymous volume for Python virtual environment
+        "target=/app/python/.venv,type=volume"
     ],
 	"customizations": {
 		"vscode": {
             "settings": {
-                "go.useLanguageServer": true
+                "go.useLanguageServer": true,
+
+				"python.defaultInterpreterPath": "/app/python/.venv/bin/python",
+				"autopep8.importStrategy": "fromEnvironment",
+				"black-formatter.importStrategy": "fromEnvironment",
+				"isort.importStrategy": "fromEnvironment",
+    			"ruff.importStrategy": "fromEnvironment",
+				"[python]": {
+					"editor.rulers": [120],
+    				"editor.defaultFormatter": "charliermarsh.ruff"
+				},
+
+				// No A/B testing
+				"python.experiments.enabled": false
 			},
 			"extensions": [
 				"GitHub.vscode-pull-request-github",
-				"github.vscode-github-actions"
+				"github.vscode-github-actions",
+				"tamasfe.even-better-toml",
+				"ms-python.black-formatter",
+				"ms-python.isort",
+				"charliermarsh.ruff"
 			]
         }
-    }
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": true,
+			"installDockerBuildx": true,
+			"installDockerComposeSwitch": true,
+			"version": "latest",
+			"dockerDashComposeVersion": "none"
+		}
+	}
 }
