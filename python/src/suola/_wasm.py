@@ -24,6 +24,8 @@ def get_wasi_module(pkg_name = __package__) -> Path:
     if Path("/.dockerenv").exists():
         # Check the default build location in Docker
         module_locations.append(Path("/app/build/wasi.wasm"))
+        # In meri workspace, the working directory is /app
+        module_locations.append(Path("/app/packages/suola/build/wasi.wasm"))
  
     for location in module_locations:
         if location.exists():
