@@ -3,6 +3,7 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 # Details about the workflow:
 # - `Dockerfile` uses multi-stage builds to create a "build", "test", and "devcontainer" stage.
 # - Builds both browser and WASI Wasm modules and uploads them as artifacts.
+# - Builds a Python wheel from wasi build and uploads it as an artifact.
 # - Uses `svu` for automatic semantic versioning and tagging.
 # - Releases are only created on pushes to the main branch.
 # - Tests are run in a containerized environment to ensure consistency. 
@@ -10,11 +11,11 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 on:
   push:
     branches:
-      - main
+      - '**'
 
   pull_request:
     branches: 
-     - main
+     - '**'
 
 permissions:
   contents: write  # required for creating releases and uploading artifacts
@@ -70,6 +71,10 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
+
+      # TODO: run test-wasi, but requires fixing the wasi tests first
+      # - name: "🧪 Run WASI tests (in Docker container)"
+      #   run: ...
 
       # Setup go for svu
       # svu is used to manage semantic versioning
