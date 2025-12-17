@@ -80,10 +80,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --python "/usr/bin/python${PYTHON_VERSION}" \
         "${UV_PROJECT_ENVIRONMENT}"
 
-# Copy build objects
 COPY . .
 
-COPY --from=wasm-builder ./build ./build
+# Copy build objects
+COPY --from=wasm-builder /app/build /app/build
 
 RUN find . -type f;
 
