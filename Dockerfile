@@ -22,8 +22,6 @@ RUN --mount=type=bind,source=go.mod,target=go.mod \
 # Copy local code to the container image.
 COPY . .
 
-RUN find . -type f;
-
 # Build the binary.
 
 # To be considered; Should we add the rules.yaml file a remote repo?
@@ -85,8 +83,6 @@ COPY . .
 
 # Copy build objects
 COPY --from=wasm-builder /app/build /app/build
-
-RUN find . -type f;
 
 CMD ["/bin/bash", "-c", "make build-python"]
 
