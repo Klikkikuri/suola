@@ -29,6 +29,31 @@ sites:
         expected: https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80
         signature: 7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c
 
+  - domain: www.talouselama.fi
+    # https://www.talouselama.fi/uutiset/a/bda97ab5-434d-4248-8f18-fa9e1f6a5c96
+    templates:
+      - pattern: "^/uutiset/a/(?P<ArticleID>[0-9a-f-]{36})"
+        template: "https://www.talouselama.fi/uutiset/a/{{ .ArticleID }}"
+    tests:
+      - url: https://www.talouselama.fi/uutiset/a/5e12fadb-217d-4841-80cb-1cb5a89e2d9d
+        expected: https://www.talouselama.fi/uutiset/a/5e12fadb-217d-4841-80cb-1cb5a89e2d9d
+        signature: 95eece0fe1114f8cbf620bf72c0427068ca3ded216d141f1516492c9a6e2206d
+      - url: https://www.talouselama.fi/uutiset/a/5e12fadb-217d-4841-80cb-1cb5a89e2d9d?utm_source=facebook
+        expected: https://www.talouselama.fi/uutiset/a/5e12fadb-217d-4841-80cb-1cb5a89e2d9d
+        signature: 95eece0fe1114f8cbf620bf72c0427068ca3ded216d141f1516492c9a6e2206d
+  - domain: www.tivi.fi
+    templates:
+      - pattern: "^/uutiset/a/(?P<ArticleID>[0-9a-f-]{36})"
+        template: "https://www.tivi.fi/uutiset/a/{{ .ArticleID }}"
+      - pattern: "^/blogit/a/(?P<ArticleID>[0-9a-f-]{36})"
+        template: "https://www.tivi.fi/blogit/a/{{ .ArticleID }}"
+    tests:
+      - url: https://www.tivi.fi/uutiset/a/51f326fc-388f-418d-a505-ff239b270b51
+        expected: https://www.tivi.fi/uutiset/a/51f326fc-388f-418d-a505-ff239b270b51
+        signature: 166ead545f4084a9599a666d83c408ca05a494a9ade70defd58175efddad29da
+      - url: https://www.tivi.fi/luetuimmat
+        xfail: true
+
   - domain: is.fi
     templates:
       # NOTE: The MaybeOutlet should contain the leading slash / when inserted to the template.
@@ -65,6 +90,23 @@ sites:
         expected: https://yle.fi/a/74-20194304
         signature: f0f7af3fb1130daa54674b37f55c16cc647b871b93aadf919531416790565487
 
+  - domain: "www.verkkouutiset.fi"
+    templates:
+      - pattern: "^/a/(?P<ArticleSlug>[^/]+)(?:/)?$"
+        template: "https://www.verkkouutiset.fi/a/{{ .ArticleSlug }}/"
+    tests:
+      - url: https://www.verkkouutiset.fi/sign-up/
+        xfail: true
+      - url: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri/
+        expected: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri/
+        signature: d7d3116b1ab2adab588093ff253581e4b96add839cf099fbe87896386ac7c584
+      - url: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri/?utm_source=newsletter
+        expected: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri/
+        signature: d7d3116b1ab2adab588093ff253581e4b96add839cf099fbe87896386ac7c584
+      - url: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri?utm_source=newsletter
+        expected: https://www.verkkouutiset.fi/a/sahkon-hinta-on-suomalaisille-yha-mysteeri/
+        signature: d7d3116b1ab2adab588093ff253581e4b96add839cf099fbe87896386ac7c584
+
   - domain: faktabaari.fi
     templates:
       - pattern: "^/fakta/(?P<ArticleSlug>[^/]+)(?:/)?$"
@@ -100,7 +142,7 @@ sites:
         expected: https://www.hs.fi/urheilu/art-2000011690526.html
         signature: c36813d09cd27e844c29c989a96b787fe754d1f04fb713551c71936f49dcb590
 
-  - domain: svt.se
+  - domain: www.svt.se
     templates:
       - pattern: "^/nyheter/lokalt/(?P<Region>[^/]+)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
         template: "https://www.svt.se/nyheter/lokalt/{{ .Region }}/{{ .ArticleSlug }}"
