@@ -20,6 +20,10 @@ func TestExtractionRules(t *testing.T) {
 				var hashed = ""
 
 				resUrl, err := processURL(test.Url)
+				if test.XFail && resUrl == "" {
+					t.Logf("✅ Expected failure for: %s\n", test.Url)
+					return
+				}
 
 				if test.Signature != "" {
 					hashed = generateSignature(resUrl)

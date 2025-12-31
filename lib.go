@@ -29,6 +29,7 @@ type TemplateRule struct {
 type RuleTestCase struct {
 	Url       string `yaml:"url"`
 	Expected  string `yaml:"expected"`
+	XFail     bool   `yaml:"xfail,omitempty"` // Expected to fail
 	Signature string `yaml:"signature,omitempty"`
 }
 
