@@ -90,7 +90,7 @@ sites:
         expected: https://yle.fi/a/74-20194304
         signature: f0f7af3fb1130daa54674b37f55c16cc647b871b93aadf919531416790565487
 
-  - domain: "www.verkkouutiset.fi"
+  - domain: www.verkkouutiset.fi
     templates:
       - pattern: "^/a/(?P<ArticleSlug>[^/]+)(?:/)?$"
         template: "https://www.verkkouutiset.fi/a/{{ .ArticleSlug }}/"
