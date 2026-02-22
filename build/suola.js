@@ -1,4 +1,4 @@
-async function initSuola(suolaUrl) {
+export async function initSuola(suolaUrl) {
     // Fallback for non-extension runs.
     if (!suolaUrl) {
         suolaUrl = "js.wasm";
