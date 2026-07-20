@@ -93,13 +93,13 @@ jobs:
           fetch-depth: 0  # Needed for svu to work properly
           ref: ${{ steps.source.outputs.source_sha }}
 
-      - name: "🦺 Set up Go"
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
       - name: "📦 Install svu"
-        run: go install github.com/caarlos0/svu@v1.12
+        run: |
+          curl -sLo svu.tar.gz https://github.com/caarlos0/svu/releases/download/v3.4.1/svu_3.4.1_linux_amd64.tar.gz
+          echo "7ee8c91998c15109130638dc661a912d5f426e2f8642f6f6c04e6502be920770  svu.tar.gz" | sha256sum -c -
+          tar xzf svu.tar.gz svu
+          sudo mv svu /usr/local/bin/
+          rm svu.tar.gz
 
       - name: "🔢 Generate version and tag"
         run: |
