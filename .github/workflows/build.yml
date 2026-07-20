@@ -1,34 +1,21 @@
-name: "🚀 Build and Upload Artifacts 🏗️"
+name: "🛠️ Build and Test"
 
 # Details about the workflow:
-# - `Dockerfile` uses multi-stage builds to create a "build", "test", and "devcontainer" stage.
+# - `Dockerfile` uses multi-stage builds to create build and test stages.
 # - Builds both browser and WASI Wasm modules and uploads them as artifacts.
 # - Builds a Python wheel from wasi build and uploads it as an artifact.
-# - Uses `svu` for automatic semantic versioning and tagging.
-# - Releases are only created on pushes to the main branch.
-# - Tests are run in a containerized environment to ensure consistency. 
+# - Runs Go and Python tests in a containerized environment.
 
 on:
   workflow_dispatch:
-
-  push:
-    branches:
-      - 'main'
 
   pull_request:
     branches: 
      - '**'
 
 permissions:
-  contents: write  # required for creating releases and uploading artifacts
+  contents: read
   actions: read  # required for uploading artifacts
-  id-token: write  # Required for attestation
-  attestations: write  # Required for attestation
-
-env:
-  # Set the default version to dev if not specified
-  version: "dev"
-  is_release: false
 
 jobs:
   build:
@@ -38,40 +25,9 @@ jobs:
     steps:
       - name: "🔄 Checkout code"
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Needed for svu to work properly
 
       - name: "🔧 Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
-
-
-      # Setup go for svu
-      # svu is used to manage semantic versioning
-      - name: "🦺 Set up Go"
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-      - name: "📦 Install svu"
-        run: go install github.com/caarlos0/svu@v1.12
-
-      - name: "🔢 Generate version"
-        run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # Auto-bump version on main branch
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-            NEXT_VERSION=$(svu next)
-            git tag $NEXT_VERSION
-            git push origin $NEXT_VERSION
-            echo "version=$NEXT_VERSION" >> $GITHUB_ENV
-            echo "is_release=true" >> $GITHUB_ENV
-          else
-            # Use dev version for PRs
-            VERSION="$(svu current)-$(git rev-parse --short HEAD)"
-            echo "version=$VERSION" >> $GITHUB_ENV
-            echo "is_release=false" >> $GITHUB_ENV
-          fi
 
 
       - name: "🏗️ Build wasm modules (in Docker container)"
@@ -113,27 +69,8 @@ jobs:
         # This is useful for testing
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ env.version }}
+          name: build-${{ github.sha }}
           path: |
             build/suola-*.whl
             build/*.wasm
             build/wasm_exec.js
-
-      - name: "🏷️ Create GitHub Release"
-        if: env.is_release == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.version }}
-          files: |
-            build/suola-*.whl
-            build/*.wasm
-            build/wasm_exec.js
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: "🔒 Attest release artifacts"
-        if: env.is_release == 'true'
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: 'build/*.wasm, build/wasm_exec.js, build/suola-*.whl'

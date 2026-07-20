@@ -1,0 +1,113 @@
+name: "Release"
+
+# Details about the workflow:
+# - Handles semantic versioning, tagging, release artifacts, and GitHub Releases.
+# - Runs only for main branch pushes or manual dispatch.
+# - Builds and tests in a containerized environment before publishing.
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - 'main'
+
+permissions:
+  contents: write  # required for creating tags and GitHub releases
+  actions: read  # required for uploading artifacts
+  id-token: write  # required for attestation
+  attestations: write  # required for attestation
+
+env:
+  version: "dev"
+
+jobs:
+  release:
+    name: "Build, Test and Release"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "🔄 Checkout code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for svu to work properly
+
+      - name: "🔧 Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+
+      - name: "🦺 Set up Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: "📦 Install svu"
+        run: go install github.com/caarlos0/svu@v1.12
+
+      - name: "🔢 Generate version and tag"
+        run: |
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "Releases can only be created from the main branch."
+            exit 1
+          fi
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEXT_VERSION=$(svu next)
+          git tag $NEXT_VERSION
+          git push origin $NEXT_VERSION
+          echo "version=$NEXT_VERSION" >> $GITHUB_ENV
+
+      - name: "🏗️ Build wasm modules (in Docker container)"
+        run: |
+          docker build --target wasm-builder -t wasm-builder .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            wasm-builder
+
+      - name: "🏗️ Build python wheel (in Docker container)"
+        run: |
+          docker build --target python-builder -t python-builder .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-builder
+
+      - name: "🧪 Run Go tests (in Docker container)"
+        run: |
+          docker build --target test -t test-runner .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            test-runner
+
+      - name: "🧪 Run Python tests (in Docker container)"
+        run: |
+          docker build --target python-test -t python-test-runner .
+          docker run --rm \
+            -v ${{ github.workspace }}/build:/app/build \
+            python-test-runner
+
+      - name: "⬆️ Upload release artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ env.version }}
+          path: |
+            build/suola-*.whl
+            build/*.wasm
+            build/wasm_exec.js
+
+      - name: "🏷️ Create GitHub Release"
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.version }}
+          files: |
+            build/suola-*.whl
+            build/*.wasm
+            build/wasm_exec.js
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🔒 Attest release artifacts"
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'build/*.wasm, build/wasm_exec.js, build/suola-*.whl'
