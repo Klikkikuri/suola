@@ -1,0 +1,51 @@
+name: Release
+
+# Details about the workflow:
+# - Triggers automatically when a new version tag (e.g., v1.2.3) is pushed.
+# - Calls the build workflow to produce artifacts.
+# - Creates a GitHub Release and attests the artifacts.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  release:
+    name: "🚀 Publish Release"
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required for creating GitHub releases
+      id-token: write  # required for attestation
+      attestations: write  # required for attestation
+
+    steps:
+      - name: "🔄 Checkout code"
+        uses: actions/checkout@v7
+
+      - name: "⬇️ Download build artifacts"
+        uses: actions/download-artifact@v8
+        with:
+          name: build-artifacts
+          path: build
+
+      - name: "🏷️ Create GitHub Release"
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            build/suola-*.whl
+            build/*.wasm
+            build/wasm_exec.js
+          generate_release_notes: true
+
+      - name: "🔒 Attest release artifacts"
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            build/*.wasm
+            build/wasm_exec.js
+            build/suola-*.whl
