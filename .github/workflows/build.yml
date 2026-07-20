@@ -53,7 +53,6 @@ jobs:
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target wasm-builder -t wasm-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
-            --user $(id -u):$(id -g) \
             -e GOCACHE=/tmp/gocache \
             -e HOME=/tmp \
             -v ${{ github.workspace }}/.gocache:/tmp/gocache \
@@ -66,7 +65,6 @@ jobs:
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-builder -t python-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
-            --user $(id -u):$(id -g) \
             -e PIP_CACHE_DIR=/tmp/pipcache \
             -e HOME=/tmp \
             -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
@@ -78,7 +76,6 @@ jobs:
           mkdir -p ${{ github.workspace }}/.gocache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target test -t test-runner .
           docker run --rm \
-            --user $(id -u):$(id -g) \
             -e GOCACHE=/tmp/gocache \
             -e HOME=/tmp \
             -v ${{ github.workspace }}/.gocache:/tmp/gocache \
@@ -90,7 +87,6 @@ jobs:
           mkdir -p ${{ github.workspace }}/.pipcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-test -t python-test-runner .
           docker run --rm \
-            --user $(id -u):$(id -g) \
             -e PIP_CACHE_DIR=/tmp/pipcache \
             -e HOME=/tmp \
             -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
@@ -100,6 +96,10 @@ jobs:
       # TODO: run test-wasi, but requires fixing the wasi tests first
       # - name: "🧪 Run WASI tests (in Docker container)"
       #   run: ...
+
+      - name: "🔧 Fix artifact and cache permissions"
+        if: always()
+        run: sudo chown -R $(id -u):$(id -g) build/ .gocache/ .pipcache/ || true
 
       - name: "⬆️ Upload artifacts"
         # Upload the build artifacts to the GitHub Actions workspace
