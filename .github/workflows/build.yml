@@ -37,38 +37,63 @@ jobs:
       - name: "🔧 Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
 
+      - name: "💾 Cache build directories"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.gocache
+            ${{ github.workspace }}/.pipcache
+          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-build-cache-
 
       - name: "🏗️ Build wasm modules (in Docker container)"
         run: |
+          mkdir -p ${{ github.workspace }}/.gocache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target wasm-builder -t wasm-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -e GOCACHE=/tmp/gocache \
+            -e HOME=/tmp \
+            -v ${{ github.workspace }}/.gocache:/tmp/gocache \
             -v ${{ github.workspace }}/build:/app/build \
             wasm-builder
 
       - name: "🏗️ Build python wheel (in Docker container)"
         run: |
+          mkdir -p ${{ github.workspace }}/.pipcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-builder -t python-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -e PIP_CACHE_DIR=/tmp/pipcache \
+            -e HOME=/tmp \
+            -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
       - name: "🧪 Run Go tests (in Docker container)"
         run: |
+          mkdir -p ${{ github.workspace }}/.gocache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target test -t test-runner .
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -e GOCACHE=/tmp/gocache \
+            -e HOME=/tmp \
+            -v ${{ github.workspace }}/.gocache:/tmp/gocache \
             -v ${{ github.workspace }}/build:/app/build \
             test-runner
 
       - name: "🧪 Run Python tests (in Docker container)"
         run: |
+          mkdir -p ${{ github.workspace }}/.pipcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-test -t python-test-runner .
           docker run --rm \
             --user $(id -u):$(id -g) \
+            -e PIP_CACHE_DIR=/tmp/pipcache \
+            -e HOME=/tmp \
+            -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
 
