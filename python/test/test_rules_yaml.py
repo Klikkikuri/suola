@@ -40,6 +40,7 @@ def extract_test_cases():
                 'url': test.get('url'),
                 'expected': test.get('expected'),
                 'signature': test.get('sign'),
+                'xfail': test.get('xfail', False),
             })
     
     return test_cases
@@ -91,7 +92,8 @@ class TestRulesYaml:
             # Check tests structure
             for test in site['tests']:
                 assert 'url' in test
-                assert 'expected' in test
+                if not test.get('xfail', False):
+                    assert 'expected' in test
                 # signature (sign) is optional
 
     def test_all_test_cases_from_rules(self, suola, test_cases):
@@ -117,6 +119,9 @@ class TestRulesYaml:
         url = test_case['url']
         expected_sig = test_case.get('signature')
         domain = test_case['domain']
+
+        if test_case.get('xfail'):
+            pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
         
         if expected_sig:
             signature = suola(url)
