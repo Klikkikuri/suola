@@ -39,6 +39,7 @@ jobs:
           docker build --target wasm-builder -t wasm-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}/build:/app/build \
             wasm-builder
 
@@ -47,6 +48,7 @@ jobs:
           docker build --target python-builder -t python-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
@@ -54,6 +56,7 @@ jobs:
         run: |
           docker build --target test -t test-runner .
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}/build:/app/build \
             test-runner
 
@@ -61,6 +64,7 @@ jobs:
         run: |
           docker build --target python-test -t python-test-runner .
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
 
