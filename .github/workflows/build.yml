@@ -1,4 +1,4 @@
-name: "🛠️ Build and Test"
+name: "Build and Test"
 
 # Details about the workflow:
 # - `Dockerfile` uses multi-stage builds to create build and test stages.
@@ -8,6 +8,10 @@ name: "🛠️ Build and Test"
 
 on:
   workflow_dispatch:
+
+  push:
+    branches:
+      - 'main'
 
   pull_request:
     branches: 
@@ -69,7 +73,7 @@ jobs:
         # This is useful for testing
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ github.sha }}
+          name: build-artifacts
           path: |
             build/suola-*.whl
             build/*.wasm

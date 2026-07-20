@@ -1,20 +1,25 @@
-name: "Release"
+name: Release
 
 # Details about the workflow:
-# - Handles semantic versioning, tagging, release artifacts, and GitHub Releases.
-# - Runs only for main branch pushes or manual dispatch.
-# - Builds and tests in a containerized environment before publishing.
+# - Creates tags and GitHub Releases from artifacts produced by the build workflow.
+# - Automatically runs after successful builds on main.
+# - Supports manual release by specifying a successful build run ID.
 
 on:
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Successful Build and Test workflow run ID"
+        required: true
+        type: string
 
-  push:
-    branches:
-      - 'main'
+  workflow_run:
+    workflows: ["Build and Test"]
+    types: [completed]
 
 permissions:
   contents: write  # required for creating tags and GitHub releases
-  actions: read  # required for uploading artifacts
+  actions: read  # required for downloading artifacts
   id-token: write  # required for attestation
   attestations: write  # required for attestation
 
@@ -23,17 +28,70 @@ env:
 
 jobs:
   release:
-    name: "Build, Test and Release"
+    name: "Publish Release"
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
 
     steps:
+      - name: "🔎 Resolve source run"
+        id: source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let runId;
+            let headSha;
+            let headBranch;
+            let conclusion;
+            let workflowName;
+
+            if (context.eventName === 'workflow_dispatch') {
+              runId = Number(core.getInput('build_run_id', { required: true }));
+              const { data } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId,
+              });
+              headSha = data.head_sha;
+              headBranch = data.head_branch;
+              conclusion = data.conclusion;
+              workflowName = data.name;
+            } else {
+              runId = context.payload.workflow_run.id;
+              headSha = context.payload.workflow_run.head_sha;
+              headBranch = context.payload.workflow_run.head_branch;
+              conclusion = context.payload.workflow_run.conclusion;
+              workflowName = context.payload.workflow_run.name;
+            }
+
+            if (workflowName !== 'Build and Test') {
+              core.setFailed(`Expected source workflow 'Build and Test', got '${workflowName}'.`);
+              return;
+            }
+            if (headBranch !== 'main') {
+              core.setFailed(`Releases can only be created from main, got '${headBranch}'.`);
+              return;
+            }
+            if (conclusion !== 'success') {
+              core.setFailed(`Source build run must be successful, got '${conclusion}'.`);
+              return;
+            }
+
+            core.setOutput('run_id', String(runId));
+            core.setOutput('source_sha', headSha);
+        env:
+          INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
+
       - name: "🔄 Checkout code"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Needed for svu to work properly
-
-      - name: "🔧 Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v3
+          ref: ${{ steps.source.outputs.source_sha }}
 
       - name: "🦺 Set up Go"
         uses: actions/setup-go@v5
@@ -45,55 +103,21 @@ jobs:
 
       - name: "🔢 Generate version and tag"
         run: |
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
-            echo "Releases can only be created from the main branch."
-            exit 1
-          fi
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           NEXT_VERSION=$(svu next)
-          git tag $NEXT_VERSION
-          git push origin $NEXT_VERSION
-          echo "version=$NEXT_VERSION" >> $GITHUB_ENV
+          git tag "$NEXT_VERSION"
+          git push origin "$NEXT_VERSION"
+          echo "version=$NEXT_VERSION" >> "$GITHUB_ENV"
 
-      - name: "🏗️ Build wasm modules (in Docker container)"
-        run: |
-          docker build --target wasm-builder -t wasm-builder .
-          docker run --rm \
-            -v ${{ github.workspace }}/build:/app/build \
-            wasm-builder
-
-      - name: "🏗️ Build python wheel (in Docker container)"
-        run: |
-          docker build --target python-builder -t python-builder .
-          docker run --rm \
-            -v ${{ github.workspace }}/build:/app/build \
-            python-builder
-
-      - name: "🧪 Run Go tests (in Docker container)"
-        run: |
-          docker build --target test -t test-runner .
-          docker run --rm \
-            -v ${{ github.workspace }}/build:/app/build \
-            test-runner
-
-      - name: "🧪 Run Python tests (in Docker container)"
-        run: |
-          docker build --target python-test -t python-test-runner .
-          docker run --rm \
-            -v ${{ github.workspace }}/build:/app/build \
-            python-test-runner
-
-      - name: "⬆️ Upload release artifacts"
-        uses: actions/upload-artifact@v4
+      - name: "⬇️ Download build artifacts"
+        uses: actions/download-artifact@v4
         with:
-          name: release-${{ env.version }}
-          path: |
-            build/suola-*.whl
-            build/*.wasm
-            build/wasm_exec.js
+          name: build-artifacts
+          run-id: ${{ steps.source.outputs.run_id }}
+          path: build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "🏷️ Create GitHub Release"
         uses: softprops/action-gh-release@v1
