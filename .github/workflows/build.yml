@@ -9,6 +9,8 @@ name: "🚀 Build and Upload Artifacts 🏗️"
 # - Tests are run in a containerized environment to ensure consistency. 
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - 'main'
