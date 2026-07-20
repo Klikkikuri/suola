@@ -134,4 +134,7 @@ jobs:
       - name: "🔒 Attest release artifacts"
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'build/*.wasm, build/wasm_exec.js, build/suola-*.whl'
+          subject-path: |
+            build/*.wasm
+            build/wasm_exec.js
+            build/suola-*.whl
