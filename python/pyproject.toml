@@ -3,7 +3,7 @@ name = "suola"
 dynamic = ["version"]
 description = "Klikkikuri shared URL normalization and hashing WebAssembly module"
 readme = "../README.md"
-license = "MIT"
+license = "EUPL-1.2"
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4.3.8",
