@@ -33,16 +33,16 @@ jobs:
 
     steps:
       - name: "🔄 Checkout code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: "🔧 Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: "💾 Cache build directories"
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ github.workspace }}/.gocache
@@ -104,7 +104,7 @@ jobs:
       - name: "⬆️ Upload artifacts"
         # Upload the build artifacts to the GitHub Actions workspace
         # This is useful for testing
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-artifacts
           path: |
