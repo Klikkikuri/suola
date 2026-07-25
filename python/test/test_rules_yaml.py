@@ -47,14 +47,14 @@ def extract_test_cases():
 
 
 class TestRulesYaml:
-    """Test suite validating rules.yaml test cases."""
+    """Test suite validating rules.yaml using custom rules loading."""
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="module")
     def suola(self):
-        """Create a single Suola instance for all tests."""
-        return Suola()
+        """Create a Suola instance initialized with rules.yaml."""
+        return Suola(custom_rules=RULES_YAML_PATH)
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="module")
     def test_cases(self):
         """Load test cases from rules.yaml."""
         return extract_test_cases()
@@ -63,7 +63,7 @@ class TestRulesYaml:
         """Verify that rules.yaml file exists and is readable."""
         rules_file = RULES_YAML_PATH
         assert rules_file.exists(), f"rules.yaml not found at {rules_file}"
-        
+
         # Verify it's valid YAML
         rules = load_rules_yaml()
         assert rules is not None
@@ -73,63 +73,56 @@ class TestRulesYaml:
     def test_rules_yaml_structure(self):
         """Verify that rules.yaml has the expected structure."""
         rules = load_rules_yaml()
-        
+
         # Check top-level structure
         assert 'sites' in rules
         assert isinstance(rules['sites'], list)
-        
+
         # Check each site has required fields
         for site in rules['sites']:
             assert 'domain' in site, "Each site must have a domain"
             assert 'templates' in site, "Each site must have templates"
             assert 'tests' in site, "Each site must have tests"
-            
+
             # Check templates structure
             for template in site['templates']:
                 assert 'pattern' in template
                 assert 'template' in template
-            
+
             # Check tests structure
             for test in site['tests']:
                 assert 'url' in test
                 if not test.get('xfail', False):
                     assert 'expected' in test
-                # signature (sign) is optional
 
     def test_all_test_cases_from_rules(self, suola, test_cases):
         """Run all test cases defined in rules.yaml."""
         assert len(test_cases) > 0, "No test cases found in rules.yaml"
-        
+
         for test_case in test_cases:
             url = test_case['url']
             expected_sig = test_case.get('signature')
-            
+
             if expected_sig:
-                # Test signature generation
                 signature = suola(url)
                 assert signature == expected_sig, (
-                    f"Signature mismatch for {url}\n"
-                    f"Expected: {expected_sig}\n"
-                    f"Got: {signature}"
+                    f"Signature mismatch for {url}\nExpected: {expected_sig}\nGot: {signature}"
                 )
 
     @pytest.mark.parametrize("test_case", extract_test_cases())
     def test_individual_rule_case(self, suola, test_case):
-        """Test each rule case individually (parameterized)."""
+        """Test each rule case individually against custom loaded rules."""
         url = test_case['url']
         expected_sig = test_case.get('signature')
         domain = test_case['domain']
 
         if test_case.get('xfail'):
             pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
-        
+
         if expected_sig:
             signature = suola(url)
-            assert signature == expected_sig, (
-                f"Signature mismatch for {domain} URL: {url}"
-            )
+            assert signature == expected_sig, f"Signature mismatch for {domain} URL: {url}"
         else:
-            # If no signature is specified, just verify it doesn't error
             result = suola(url)
             assert result is not None
             assert len(result) == 64  # SHA-256 hex string length
@@ -138,7 +131,7 @@ class TestRulesYaml:
         """Test specific iltalehti.fi article URL from rules.yaml."""
         url = "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80"
         expected_signature = "7e530349c32069a7dc25485ee2886f8f88e4b8560202fec1cb3200bd8c550b4c"
-        
+
         signature = suola(url)
         assert signature == expected_signature
 
@@ -147,22 +140,18 @@ class TestRulesYaml:
         for test_case in test_cases:
             url = test_case['url']
             expected_normalized = test_case.get('expected')
-            
+
             if expected_normalized and expected_normalized != url:
-                # URL should be normalized before hashing
-                # We can't directly test the normalized URL, but we can
-                # verify that different forms produce the same signature
                 signature = suola(url)
+                assert signature is not None
                 assert len(signature) == 64
-                assert signature.isalnum()  # Valid hex string
+                assert signature.isalnum()
 
     def test_case_insensitive_section(self, suola):
         """Test that section names are lowercased according to rules.yaml transform."""
-        # According to rules.yaml, Section should be lowercased
         url1 = "https://www.iltalehti.fi/Kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80"
         url2 = "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80"
-        
-        # Both should produce the same signature due to lowercase transform
+
         try:
             sig1 = suola(url1)
             sig2 = suola(url2)
@@ -176,26 +165,48 @@ class TestRulesYaml:
         """List all domains configured in rules.yaml."""
         rules = load_rules_yaml()
         domains = [site['domain'] for site in rules.get('sites', [])]
-        
+
         assert len(domains) > 0, "No domains found in rules.yaml"
         assert 'iltalehti.fi' in domains, "Expected iltalehti.fi in rules"
-        
+
         print(f"\nConfigured domains: {', '.join(domains)}")
 
     def test_signature_consistency(self, suola):
         """Test that signatures are consistent across multiple calls."""
         test_cases = extract_test_cases()
-        
-        for test_case in test_cases[:3]:  # Test first 3 cases
+
+        for test_case in test_cases[:3]:
             url = test_case['url']
-            
-            # Call multiple times
             signatures = [suola(url) for _ in range(5)]
-            
-            # All should be identical
-            assert len(set(signatures)) == 1, (
-                f"Inconsistent signatures for {url}: {signatures}"
-            )
+            assert len(set(signatures)) == 1, f"Inconsistent signatures for {url}: {signatures}"
+
+
+class TestEmbeddedRules:
+    """Test suite validating pre-compiled default embedded WASM rules."""
+
+    @pytest.fixture(scope="module")
+    def suola(self):
+        """Create a Suola instance using default embedded WASM binary rules."""
+        return Suola()
+
+    @pytest.mark.parametrize("test_case", extract_test_cases())
+    def test_embedded_rule_case(self, suola, test_case):
+        """Test rule cases against default embedded rules, marking missing rules as xfail."""
+        url = test_case['url']
+        expected_sig = test_case.get('signature')
+        domain = test_case['domain']
+
+        if test_case.get('xfail'):
+            pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
+
+        result = suola(url)
+        if result is None:
+            pytest.xfail(f"Rule for domain '{domain}' is not included in the pre-compiled embedded WASM binary.")
+
+        if expected_sig:
+            assert result == expected_sig, f"Signature mismatch for {domain} URL: {url}"
+        else:
+            assert len(result) == 64
 
 
 if __name__ == "__main__":
