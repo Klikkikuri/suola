@@ -144,11 +144,11 @@ sites:
 
   - domain: www.svt.se
     templates:
-      - pattern: "^/nyheter/lokalt/(?P<Region>[^/]+)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+      - pattern: "^/nyheter/lokalt/(?P<Region>[^/]+)/(?P<ArticleSlug>[^/]+)/?$"
         template: "https://www.svt.se/nyheter/lokalt/{{ .Region }}/{{ .ArticleSlug }}"
-      - pattern: "^/nyheter/(?P<Category>inrikes|utrikes)/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+      - pattern: "^/nyheter/(?P<Category>inrikes|utrikes)/(?P<ArticleSlug>[^/]+)/?$"
         template: "https://www.svt.se/nyheter/{{ .Category }}/{{ .ArticleSlug }}"
-      - pattern: "^/nyhetskoll/(?P<ArticleSlug>[^/]+)/?(?:\\?.*)?$"
+      - pattern: "^/nyhetskoll/(?P<ArticleSlug>[^/]+)/?$"
         template: "https://www.svt.se/nyhetskoll/{{ .ArticleSlug }}"
     tests:
       - url: https://www.svt.se/nyheter/lokalt/varmland/ridande-luciatag-mangarig-tradition-i-karlstad-maste-sjunga-hogre
