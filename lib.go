@@ -103,7 +103,15 @@ func normalizeURL(rawURL string) (string, error) {
 
 // Extract fields using regex and query parameters
 func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
-	fields := make(map[string]string)
+	// Pre-seed implicit fields from URL (Scheme, Host, Path, RawQuery, URL).
+	// Regex or query parameters can override or supplement these values.
+	fields := map[string]string{
+		"Scheme":   u.Scheme,
+		"Host":     u.Host,
+		"Path":     u.Path,
+		"RawQuery": u.RawQuery,
+		"URL":      u.String(),
+	}
 
 	// Extract using regex
 	if rule._Regex != nil {
@@ -137,9 +145,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 		}
 	}
 
-	if len(fields) == 0 {
-		return nil, fmt.Errorf("no fields extracted from URL: %s", u.String())
-	}
+	// Note: fields is guaranteed to be non-empty because implicit fields were pre-seeded.
 	return fields, nil
 }
 
@@ -166,12 +172,10 @@ func processURL(inputURL string) (string, error) {
 		return "", err
 	}
 
-	// Assuming normalization removes "www." if needed.
-	//host := strings.TrimPrefix(parsed.Host, "www.")
 	host := parsed.Host
 
 	for _, site := range Rules.Sites {
-		if strings.HasSuffix(host, site.Domain) {
+		if site.Domain == "" || host == site.Domain || strings.HasSuffix(host, "."+site.Domain) {
 			for _, rule := range site.Templates {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
 					fields, err := extractFields(parsed, rule)

@@ -34,10 +34,19 @@ sites:
 ```
 
 **Fields:**
+- `domain`: Domain matching string (e.g. `example.com`). Set to `""` for a wildcard rule matching any domain.
 - `pattern`: Regex with named groups `(?P<Name>...)` for path extraction
 - `query_params`: Map field names to query parameter names
-- `template`: Go template with `{{ .Field }}` placeholders
+- `template`: Go template with `{{ .Field }}` placeholders.
 - `transform`: Apply `lowercase` to extracted fields
+
+**Implicit Template Fields:**
+All templates are pre-seeded with default fields extracted from the normalized URL:
+- `{{ .Host }}`: Hostname (including non-default port if present, e.g. `example.com` or `example.com:8443`)
+- `{{ .Scheme }}`: URL scheme (e.g. `https` or `http`)
+- `{{ .Path }}`: URL path (e.g. `/news/article-123`)
+- `{{ .RawQuery }}`: Sorted query parameter string (e.g. `a=1&b=2`)
+- `{{ .URL }}`: Full normalized URL string
 
 **Example:**
 ```yaml

@@ -179,3 +179,24 @@ sites:
             assert len(result) == 64
         finally:
             rules_path.unlink()
+
+    def test_wildcard_domain_rule(self):
+        """Test custom wildcard domain rule with implicit URL fields."""
+        custom_rules_content = """
+sites:
+  - domain: ""
+    templates:
+      - template: "{{ .URL }}"
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(custom_rules_content)
+            rules_path = Path(f.name)
+
+        try:
+            runtime = WasmRuntime(custom_rules_path=rules_path)
+            result = runtime.get_signature("https://any-arbitrary-domain.org/page?b=2&a=1")
+            assert result
+            assert len(result) == 64
+        finally:
+            rules_path.unlink()
+
