@@ -122,3 +122,98 @@ sites:
 	}
 }
 
+func TestSiteWeightCalculation(t *testing.T) {
+	// Custom YAML defining catch-all first, then com, example.com, www.example.com, and an explicit weight override.
+	customYAML := []byte(`
+sites:
+  - domain: ""
+    templates:
+      - template: "https://catch-all.org{{ .Path }}"
+  - domain: "com"
+    templates:
+      - pattern: "^/tld/(?P<ID>[^/]+)"
+        template: "https://tld.com/{{ .ID }}"
+  - domain: "example.com"
+    templates:
+      - pattern: "^/fallback-only/(?P<ID>[^/]+)"
+        template: "https://example.com/fallback/{{ .ID }}"
+      - pattern: "^/article/(?P<ID>[^/]+)"
+        template: "https://example.com/article/{{ .ID }}"
+  - domain: "www.example.com"
+    templates:
+      - pattern: "^/article/(?P<ID>[^/]+)"
+        template: "https://www.example.com/subdomain/article/{{ .ID }}"
+  - domain: "override.com"
+    weight: 2000
+    templates:
+      - pattern: "^/article/(?P<ID>[^/]+)"
+        template: "https://override.com/high-priority/{{ .ID }}"
+`)
+
+	err := LoadRules(customYAML)
+	if err != nil {
+		t.Fatalf("Failed to load custom rules: %v", err)
+	}
+
+	// Verify weights computed correctly
+	// override.com -> explicit 2000
+	// www.example.com -> 100 + 15 = 115
+	// example.com -> 100 + 11 = 111
+	// com -> 100 + 3 = 103
+	// "" -> 0
+	expectedDomainOrder := []string{"override.com", "www.example.com", "example.com", "com", ""}
+	if len(Rules.Sites) != len(expectedDomainOrder) {
+		t.Fatalf("Expected %d sites, got %d", len(expectedDomainOrder), len(Rules.Sites))
+	}
+	for i, expectedDom := range expectedDomainOrder {
+		if Rules.Sites[i].Domain != expectedDom {
+			t.Errorf("Site index %d: expected domain %q, got %q", i, expectedDom, Rules.Sites[i].Domain)
+		}
+	}
+
+	tests := []struct {
+		name     string
+		inputURL string
+		expected string
+	}{
+		{
+			name:     "Explicit weight override takes top priority",
+			inputURL: "https://www.override.com/article/1",
+			expected: "https://override.com/high-priority/1",
+		},
+		{
+			name:     "www.example.com (weight 115) matches before example.com (weight 111)",
+			inputURL: "https://www.example.com/article/123",
+			expected: "https://www.example.com/subdomain/article/123",
+		},
+		{
+			name:     "Falls through www.example.com to example.com if path pattern doesn't match www rule",
+			inputURL: "https://www.example.com/fallback-only/456",
+			expected: "https://example.com/fallback/456",
+		},
+		{
+			name:     "Falls through example.com to com if path pattern matches TLD rule",
+			inputURL: "https://www.example.com/tld/789",
+			expected: "https://tld.com/789",
+		},
+		{
+			name:     "Falls through to catch-all if no specific domain/path matches",
+			inputURL: "https://www.example.com/unknown/path",
+			expected: "https://catch-all.org/unknown/path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := processURL(tt.inputURL)
+			if err != nil {
+				t.Fatalf("processURL unexpected error: %v", err)
+			}
+			if res != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, res)
+			}
+		})
+	}
+}
+
+

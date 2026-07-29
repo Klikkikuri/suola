@@ -15,11 +15,12 @@ Rules are embedded in the Wasm module, and the module will not work without them
 
 Signatures are generated using SHA-256 hashing. The input URL is normalized according to the rules defined in the `rules.yaml` file, and then the hash is computed. This ensures that the same URL will always produce the same signature, regardless of its original format.
 
-URL normalization rules defined per domain. Rules are applied in the order they are defined. The first matching rule will be used for normalization and hashing.
+URL normalization rules defined per domain. Site rules are evaluated in descending order of effective weight. Higher-weighted sites are evaluated first. If a site's templates do not match, evaluation falls through to the next matching site in weight order (e.g., `www.example.com` -> `example.com` -> `com` -> `""`).
 
 ```yaml
 sites:
   - domain: example.com
+    weight: 200                           # Optional priority weight
     templates:
       - pattern: "(?P<GroupName>[^/]+)"       # Named regex groups
         query_params:                          # Extract query params
@@ -35,6 +36,9 @@ sites:
 
 **Fields:**
 - `domain`: Domain matching string (e.g. `example.com`). Set to `""` for a wildcard rule matching any domain.
+- `weight`: Optional integer weight to explicitly override site evaluation priority. If omitted:
+  - Wildcard domain `""` receives auto-weight `0` (catch-all).
+  - Specific domains receive auto-weight `100 + len(domain)` (longer, more specific domain names naturally take precedence).
 - `pattern`: Regex with named groups `(?P<Name>...)` for path extraction
 - `query_params`: Map field names to query parameter names
 - `template`: Go template with `{{ .Field }}` placeholders.

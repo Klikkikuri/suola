@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -35,9 +36,11 @@ type RuleTestCase struct {
 
 // SiteRule holds all extraction templates for a site
 type SiteRule struct {
-	Domain    string         `yaml:"domain"`    // Domain this applies to
-	Templates []TemplateRule `yaml:"templates"` // Multiple extraction templates
-	Tests     []RuleTestCase `yaml:"tests"`     // Tests for this rule
+	Domain           string         `yaml:"domain"`           // Domain this applies to
+	Templates        []TemplateRule `yaml:"templates"`        // Multiple extraction templates
+	Tests            []RuleTestCase `yaml:"tests"`            // Tests for this rule
+	Weight           *int           `yaml:"weight,omitempty"` // Optional explicit priority weight
+	_EffectiveWeight int            // Calculated weight for site evaluation priority
 }
 
 type Config struct {
@@ -48,6 +51,19 @@ type Config struct {
 var DefaultCfgData []byte
 
 var Rules *Config
+
+// Calculate the effective weight of a site rule.
+// If Weight is explicitly set, it overrides automatic calculation.
+// Otherwise, domain "" receives weight 0 (catch-all), and non-empty domains receive 100 + len(Domain).
+func calculateSiteWeight(site *SiteRule) int {
+	if site.Weight != nil {
+		return *site.Weight
+	}
+	if site.Domain == "" {
+		return 0
+	}
+	return 100 + len(site.Domain)
+}
 
 // Read config from file
 func mustReadConfig(path string) []byte {
@@ -72,8 +88,9 @@ func LoadRules(data []byte) error {
 		return fmt.Errorf("parsing YAML: %w", err)
 	}
 
-	// Compile regex and parse templates
+	// Compile regex and parse templates, and compute site weights
 	for i := range cfg.Sites {
+		cfg.Sites[i]._EffectiveWeight = calculateSiteWeight(&cfg.Sites[i])
 		for j := range cfg.Sites[i].Templates {
 			tmpl, err := template.New("urlTemplate").Option("missingkey=zero").Parse(cfg.Sites[i].Templates[j].Template)
 			if err != nil {
@@ -90,6 +107,11 @@ func LoadRules(data []byte) error {
 			}
 		}
 	}
+
+	// Sort sites descending by _EffectiveWeight (higher weight evaluated first)
+	sort.SliceStable(cfg.Sites, func(i, j int) bool {
+		return cfg.Sites[i]._EffectiveWeight > cfg.Sites[j]._EffectiveWeight
+	})
 
 	Rules = &cfg
 
