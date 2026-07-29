@@ -37,21 +37,6 @@ def get_wasi_module(pkg_name = __package__) -> Path:
         )
 
 
-class SuolaError(Exception):
-    """Base exception class for all Suola errors."""
-    pass
-
-
-class SuolaValueError(SuolaError, ValueError):
-    """Raised when URL or Rules input validation fails."""
-    pass
-
-
-class SuolaRuntimeError(SuolaError, RuntimeError):
-    """Raised when WASM allocation or execution fails."""
-    pass
-
-
 class WasmRuntime:
     """Direct WASM runtime using wasmtime-py for in-process execution."""
 
@@ -177,18 +162,30 @@ class WasmRuntime:
             self.free_fn(self.store, url_ptr)
 
     def append_rules(self, rules: str | bytes | Path) -> None:
-        """Append additional YAML rules to the runtime at runtime."""
+        """
+        Append additional YAML rules to the runtime at runtime.
+
+        Note on string resolution:
+        If a `str` is passed, it is treated as literal YAML content if it contains newlines or
+        starts with 'sites:'. Otherwise, if it corresponds to an existing file path on disk,
+        it will be read from that file. To guarantee that a file path is never misinterpreted as
+        literal YAML, pass a `pathlib.Path` instance.
+        """
         if self.append_rules_fn is None:
             raise RuntimeError("AppendRules export not available in WASM module")
 
         if isinstance(rules, Path):
             rules_bytes = rules.read_bytes()
         elif isinstance(rules, str):
-            p = Path(rules)
-            if p.exists() and p.is_file():
-                rules_bytes = p.read_bytes()
-            else:
+            s = rules.strip()
+            if "\n" in rules or s.startswith("sites:"):
                 rules_bytes = rules.encode('utf-8')
+            else:
+                p = Path(rules)
+                if p.exists() and p.is_file():
+                    rules_bytes = p.read_bytes()
+                else:
+                    rules_bytes = rules.encode('utf-8')
         elif isinstance(rules, bytes):
             rules_bytes = rules
         else:
