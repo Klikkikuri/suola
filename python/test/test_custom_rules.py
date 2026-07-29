@@ -179,3 +179,56 @@ sites:
             assert len(result) == 64
         finally:
             rules_path.unlink()
+
+    def test_wildcard_domain_rule(self):
+        """Test custom wildcard domain rule with implicit URL fields."""
+        custom_rules_content = """
+sites:
+  - domain: ""
+    templates:
+      - template: "{{ .URL }}"
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(custom_rules_content)
+            rules_path = Path(f.name)
+
+        try:
+            runtime = WasmRuntime(custom_rules_path=rules_path)
+            result = runtime.get_signature("https://any-arbitrary-domain.org/page?b=2&a=1")
+            assert result
+            assert len(result) == 64
+        finally:
+            rules_path.unlink()
+
+    def test_site_rule_weight_ordering(self):
+        """Test site rule weight ordering and fallback via Python WASM integration."""
+        custom_rules_content = """
+sites:
+  - domain: ""
+    templates:
+      - template: "https://catch-all.org{{ .Path }}"
+  - domain: "example.com"
+    templates:
+      - pattern: "^/article/(?P<ID>[^/]+)"
+        template: "https://example.com/article/{{ .ID }}"
+  - domain: "www.example.com"
+    templates:
+      - pattern: "^/article/(?P<ID>[^/]+)"
+        template: "https://www.example.com/subdomain/article/{{ .ID }}"
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(custom_rules_content)
+            rules_path = Path(f.name)
+
+        try:
+            runtime = WasmRuntime(custom_rules_path=rules_path)
+            # www.example.com (weight 115) matches before example.com (weight 111) despite catch-all being listed first
+            sig1 = runtime.get_signature("https://www.example.com/article/123")
+            sig2 = runtime.get_signature("https://example.com/article/123")
+            assert sig1 != sig2
+            assert len(sig1) == 64
+            assert len(sig2) == 64
+        finally:
+            rules_path.unlink()
+
+
