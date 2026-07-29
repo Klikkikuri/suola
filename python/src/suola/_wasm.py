@@ -41,6 +41,7 @@ class WasmRuntime:
     """Direct WASM runtime using wasmtime-py for in-process execution."""
 
     get_signature_fn: wasmtime.Func
+    append_rules_fn: Optional[wasmtime.Func]
     malloc_fn: wasmtime.Func
     free_fn: wasmtime.Func
 
@@ -90,6 +91,7 @@ class WasmRuntime:
         logger.debug("WASM module exports: %s", [export for export in exports])
 
         self.get_signature_fn = cast(wasmtime.Func, exports["GetSignature"])
+        self.append_rules_fn = cast(Optional[wasmtime.Func], exports.get("AppendRules"))
         self.malloc_fn = cast(wasmtime.Func, exports["Malloc"])
         self.free_fn = cast(wasmtime.Func, exports["Free"])
         self.memory = cast(wasmtime.Memory, exports["memory"])
@@ -158,6 +160,66 @@ class WasmRuntime:
             # Free only the input buffer allocated by Malloc
             # Note: sig_ptr is managed by Go's memory pool and should NOT be freed here
             self.free_fn(self.store, url_ptr)
+
+    def append_rules(self, rules: str | bytes | Path) -> None:
+        """
+        Append additional YAML rules to the runtime at runtime.
+
+        Note on string resolution:
+        If a `str` is passed, it is treated as literal YAML content if it contains newlines or
+        starts with 'sites:'. Otherwise, if it corresponds to an existing file path on disk,
+        it will be read from that file. To guarantee that a file path is never misinterpreted as
+        literal YAML, pass a `pathlib.Path` instance.
+        """
+        if self.append_rules_fn is None:
+            raise RuntimeError("AppendRules export not available in WASM module")
+
+        if isinstance(rules, Path):
+            rules_bytes = rules.read_bytes()
+        elif isinstance(rules, str):
+            s = rules.strip()
+            if "\n" in rules or s.startswith("sites:"):
+                rules_bytes = rules.encode('utf-8')
+            else:
+                p = Path(rules)
+                if p.exists() and p.is_file():
+                    rules_bytes = p.read_bytes()
+                else:
+                    rules_bytes = rules.encode('utf-8')
+        elif isinstance(rules, bytes):
+            rules_bytes = rules
+        else:
+            raise TypeError(f"Invalid type for rules: {type(rules)}")
+
+        rules_len = len(rules_bytes)
+        if rules_len == 0:
+            raise ValueError("Rules data cannot be empty")
+
+        rules_ptr = self.malloc_fn(self.store, rules_len)
+        if rules_ptr == 0:
+            raise RuntimeError("Failed to allocate memory in WASM")
+
+        try:
+            memory_data = self.memory.data_ptr(self.store)
+            ptr_type = ctypes.c_ubyte * rules_len
+            src_ptr = ptr_type.from_buffer_copy(rules_bytes)
+            ctypes.memmove(ctypes.addressof(memory_data.contents) + rules_ptr, src_ptr, rules_len)
+
+            result = self.append_rules_fn(self.store, rules_ptr, rules_len)
+
+            sig_ptr = (result >> 32) & 0xFFFFFFFF
+            sig_len = result & 0x7FFFFFFF
+            is_error = (result & 0x80000000) != 0
+
+            if is_error:
+                memory_size = self.memory.data_len(self.store)
+                if sig_ptr != 0 and sig_len > 0 and sig_ptr + sig_len <= memory_size:
+                    err_msg = bytes(memory_data[sig_ptr:sig_ptr + sig_len]).decode('utf-8')
+                else:
+                    err_msg = "Unknown WASM error"
+                raise RuntimeError(f"Failed to append rules: {err_msg}")
+        finally:
+            self.free_fn(self.store, rules_ptr)
 
 
 if __name__ == "__main__":

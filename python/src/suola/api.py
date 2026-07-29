@@ -75,6 +75,21 @@ class Suola(SuolaAPI):
             logger.error(f"Error hashing URL: {e}")
         return None
 
+    def append_rules(self, rules: str | Path | bytes) -> None:
+        """
+        Append additional YAML rules at runtime.
+
+        :param rules: Path to YAML rules file, YAML string, or bytes
+
+        Note on string resolution:
+        If a `str` is passed, it is treated as literal YAML content if it contains newlines or
+        starts with 'sites:'. Otherwise, if it corresponds to an existing file path on disk,
+        it will be read from that file. To guarantee that a file path is never misinterpreted as
+        literal YAML, pass a `pathlib.Path` instance.
+        """
+        self._runtime.append_rules(rules)
+        logger.debug("Appended additional rules")
+
 if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.DEBUG)

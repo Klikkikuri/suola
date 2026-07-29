@@ -231,4 +231,51 @@ sites:
         finally:
             rules_path.unlink()
 
+    def test_append_rules_at_runtime(self):
+        """Test appending additional rules at runtime via WasmRuntime."""
+        runtime = WasmRuntime()
+
+        # Initial rule should work for default sites
+        sig_default = runtime.get_signature("https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b")
+        assert sig_default
+
+        # Append new rule for a new domain
+        new_rules_yaml = """
+sites:
+  - domain: "runtimeappended.org"
+    templates:
+      - pattern: "^/doc/(?P<ID>[^/]+)"
+        template: "https://runtimeappended.org/doc/{{ .ID }}"
+"""
+        runtime.append_rules(new_rules_yaml)
+
+        # Default rules still work
+        sig_default_after = runtime.get_signature("https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b")
+        assert sig_default_after == sig_default
+
+        # Appended rule works
+        sig_appended = runtime.get_signature("https://runtimeappended.org/doc/999")
+        assert sig_appended
+        assert len(sig_appended) == 64
+
+    def test_suola_api_append_rules(self):
+        """Test appending additional rules at runtime via Suola high-level API."""
+        from suola.api import Suola
+
+        suola = Suola()
+
+        new_rules_yaml = """
+sites:
+  - domain: "highlevelapi.net"
+    templates:
+      - pattern: "^/view/(?P<ID>[^/]+)"
+        template: "https://highlevelapi.net/view/{{ .ID }}"
+"""
+        suola.append_rules(new_rules_yaml)
+
+        res = suola("https://highlevelapi.net/view/777")
+        assert res
+        assert len(res) == 64
+
+
 
