@@ -17,8 +17,21 @@ func hashUrl(this js.Value, args []js.Value) any {
 	return hash
 }
 
+func appendRulesJS(this js.Value, args []js.Value) any {
+	if len(args) == 0 {
+		return "rules data required"
+	}
+	rulesYaml := args[0].String()
+	err := AppendRules([]byte(rulesYaml))
+	if err != nil {
+		return err.Error()
+	}
+	return nil
+}
+
 func RegisterCallbacks() {
 	js.Global().Set("hashUrl", js.FuncOf(hashUrl))
+	js.Global().Set("appendRules", js.FuncOf(appendRulesJS))
 }
 
 func main() {

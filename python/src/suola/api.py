@@ -75,6 +75,15 @@ class Suola(SuolaAPI):
             logger.error(f"Error hashing URL: {e}")
         return None
 
+    def append_rules(self, rules: str | Path | bytes) -> None:
+        """
+        Append additional YAML rules at runtime.
+
+        :param rules: Path to YAML rules file, YAML string, or bytes
+        """
+        self._runtime.append_rules(rules)
+        logger.debug("Appended additional rules")
+
 if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.DEBUG)

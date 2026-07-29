@@ -32,7 +32,7 @@ func main() {
 		fmt.Printf("Failed to load config: %v", err)
 		os.Exit(1)
 	} else {
-		fmt.Printf("Loaded config with %d sites", len(Rules.Sites))
+		fmt.Printf("Loaded config with %d sites", len(GetRules().Sites))
 	}
 
 	formattedURL, err := processURL(*urlInput)

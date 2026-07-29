@@ -103,6 +103,30 @@ func GetSignature(urlPtr, urlLen uint32) uint64 {
 	return uint64(sigPtr)<<32 | uint64(sigLen)
 }
 
+// AppendRules parses and appends additional YAML rules at runtime.
+//
+// Parameters:
+//   - rulesPtr: Pointer to YAML string in WASM memory (allocated by caller with Malloc)
+//   - rulesLen: Length of YAML string in bytes
+//
+// Returns: uint64 packed as follows:
+//   - High 32 bits: Pointer to result string in WASM memory
+//   - Low 32 bits:  Length of result string
+//   - Bit 31 of low 32 bits: Error flag (1 = error, 0 = success)
+//
+//go:wasmexport AppendRules
+func WasmAppendRules(rulesPtr, rulesLen uint32) uint64 {
+	rulesStr := ptrToString(rulesPtr, rulesLen)
+	if err := AppendRules([]byte(rulesStr)); err != nil {
+		errMsg := err.Error()
+		errPtr, errLen := stringToPtr(errMsg)
+		return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+	}
+
+	msgPtr, msgLen := stringToPtr("OK")
+	return uint64(msgPtr)<<32 | uint64(msgLen)
+}
+
 // Helper to convert pointer and length to Go string
 func ptrToString(ptr, length uint32) string {
 	if length == 0 {

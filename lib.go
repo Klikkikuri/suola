@@ -11,10 +11,17 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"text/template"
 
 	"github.com/PuerkitoBio/purell"
 	"gopkg.in/yaml.v2"
+)
+
+const (
+	MaxRulesSize     = 2 * 1024 * 1024 // 2 MB
+	MaxPatternLength = 4096            // 4 KB per pattern
 )
 
 // Defines how to extract values from URL
@@ -50,7 +57,15 @@ type Config struct {
 //go:embed rules.yaml
 var DefaultCfgData []byte
 
-var Rules *Config
+var (
+	rules      atomic.Pointer[Config]
+	rulesMutex sync.Mutex
+)
+
+// GetRules returns the current active configuration snapshot.
+func GetRules() *Config {
+	return rules.Load()
+}
 
 // Calculate the effective weight of a site rule.
 // If Weight is explicitly set, it overrides automatic calculation.
@@ -81,40 +96,96 @@ func mustReadConfig(path string) []byte {
 	return data
 }
 
-// Load and compile the YAML config
-func LoadRules(data []byte) error {
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parsing YAML: %w", err)
-	}
-
-	// Compile regex and parse templates, and compute site weights
-	for i := range cfg.Sites {
-		cfg.Sites[i]._EffectiveWeight = calculateSiteWeight(&cfg.Sites[i])
-		for j := range cfg.Sites[i].Templates {
-			tmpl, err := template.New("urlTemplate").Option("missingkey=zero").Parse(cfg.Sites[i].Templates[j].Template)
+func compileSites(sites []SiteRule) error {
+	for i := range sites {
+		sites[i]._EffectiveWeight = calculateSiteWeight(&sites[i])
+		for j := range sites[i].Templates {
+			tmpl, err := template.New("urlTemplate").Option("missingkey=zero").Parse(sites[i].Templates[j].Template)
 			if err != nil {
-				return fmt.Errorf("parsing template for domain %s: %w", cfg.Sites[i].Domain, err)
+				return fmt.Errorf("parsing template for domain %s: %w", sites[i].Domain, err)
 			}
-			cfg.Sites[i].Templates[j]._Template = tmpl
+			sites[i].Templates[j]._Template = tmpl
 
-			if cfg.Sites[i].Templates[j].Pattern != "" {
-				re, err := regexp.Compile(cfg.Sites[i].Templates[j].Pattern)
-				if err != nil {
-					return fmt.Errorf("compiling regex for domain %s: %w", cfg.Sites[i].Domain, err)
+			if sites[i].Templates[j].Pattern != "" {
+				if len(sites[i].Templates[j].Pattern) > MaxPatternLength {
+					return fmt.Errorf("regex pattern length %d exceeds maximum allowed %d for domain %s",
+						len(sites[i].Templates[j].Pattern), MaxPatternLength, sites[i].Domain)
 				}
-				cfg.Sites[i].Templates[j]._Regex = re
+				re, err := regexp.Compile(sites[i].Templates[j].Pattern)
+				if err != nil {
+					return fmt.Errorf("compiling regex for domain %s: %w", sites[i].Domain, err)
+				}
+				sites[i].Templates[j]._Regex = re
 			}
 		}
 	}
+	return nil
+}
 
-	// Sort sites descending by _EffectiveWeight (higher weight evaluated first)
-	sort.SliceStable(cfg.Sites, func(i, j int) bool {
-		return cfg.Sites[i]._EffectiveWeight > cfg.Sites[j]._EffectiveWeight
+func sortSites(sites []SiteRule) {
+	sort.SliceStable(sites, func(i, j int) bool {
+		if sites[i]._EffectiveWeight != sites[j]._EffectiveWeight {
+			return sites[i]._EffectiveWeight > sites[j]._EffectiveWeight
+		}
+		return sites[i].Domain < sites[j].Domain
 	})
+}
 
-	Rules = &cfg
+func parseAndCompile(data []byte) (*Config, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("rules data is empty")
+	}
+	if len(data) > MaxRulesSize {
+		return nil, fmt.Errorf("rules data size (%d bytes) exceeds maximum limit of %d bytes", len(data), MaxRulesSize)
+	}
 
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+
+	if err := compileSites(cfg.Sites); err != nil {
+		return nil, err
+	}
+
+	sortSites(cfg.Sites)
+	return &cfg, nil
+}
+
+// Load and compile the YAML config, replacing any existing active rules.
+func LoadRules(data []byte) error {
+	cfg, err := parseAndCompile(data)
+	if err != nil {
+		return err
+	}
+
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	rules.Store(cfg)
+	return nil
+}
+
+// AppendRules parses and compiles additional YAML rules, merging them with existing rules.
+func AppendRules(data []byte) error {
+	cfg, err := parseAndCompile(data)
+	if err != nil {
+		return err
+	}
+
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	current := rules.Load()
+	merged := &Config{}
+
+	if current != nil {
+		merged.Sites = append(merged.Sites, current.Sites...)
+	}
+	merged.Sites = append(merged.Sites, cfg.Sites...)
+
+	sortSites(merged.Sites)
+	rules.Store(merged)
 	return nil
 }
 
@@ -196,7 +267,12 @@ func processURL(inputURL string) (string, error) {
 
 	host := parsed.Host
 
-	for _, site := range Rules.Sites {
+	cfg := GetRules()
+	if cfg == nil {
+		return "", fmt.Errorf("rules not loaded")
+	}
+
+	for _, site := range cfg.Sites {
 		if site.Domain == "" || host == site.Domain || strings.HasSuffix(host, "."+site.Domain) {
 			for _, rule := range site.Templates {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
