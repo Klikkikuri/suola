@@ -119,7 +119,7 @@ The WASI module (`wasi.wasm`) can be used in WASI-compatible runtimes, such as [
 The WASI module exports the following functions for host integration:
 
 - `_initialize()`: Initializes the module. Must be called once, before any other export.
-- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. Memory is managed by a slab allocator. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
+- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. The buffer is kept alive by the module's memory arena until you `Free` it. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
 - `Free(ptr uint32)`: Frees a buffer previously allocated with `Malloc`. Only call this for your own input buffers, not for result pointers.
 - `GetSignature(urlPtr uint32, urlLen uint32) uint64`: Processes a URL string at the given pointer and length. Returns __a packed `uint64`__:
   - High 32 bits: pointer to the result string (signature or error message)
@@ -141,7 +141,7 @@ Python interface does this.
 
 **Memory Management:**
 - Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use.
-- Do **not** free the result pointer from `GetSignature` — it is managed by the slab allocator.
+- Do **not** free the result pointer from `GetSignature` — it is kept alive by the module's memory arena.
 
 **Error Handling:**
 - If the error bit (bit 31) in the returned length is set, the result pointer points to an error message string.
