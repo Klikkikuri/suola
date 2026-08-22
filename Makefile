@@ -37,4 +37,9 @@ clean:
 test:
 	go test -v github.com/Klikkikuri/suola
 
-.PHONY: build build-wasm build-python js wasi test clean
+# Smoke test for the browser module, which `make test` does not cover: it needs
+# Node and the built artifacts.
+test-js: js
+	node test/js_smoke.cjs "$(BUILD_DIR)"
+
+.PHONY: build build-wasm build-python js wasi test test-js clean

@@ -45,7 +45,13 @@ CMD ["/bin/bash", "-c", "make build-wasm"]
 ## ==========
 FROM wasm-builder AS test
 
-CMD ["/bin/bash", "-c", "make test"]
+# Node loads build/js.wasm for the browser-module smoke tests (make test-js).
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs
+
+CMD ["/bin/bash", "-c", "make test test-js"]
 
 
 ## Python stage
