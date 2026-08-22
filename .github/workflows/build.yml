@@ -73,7 +73,7 @@ jobs:
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
-      - name: "🧪 Run Go tests (in Docker container)"
+      - name: "🧪 Run Go, WASI and browser-module tests (in Docker container)"
         run: |
           mkdir -p ${{ github.workspace }}/.gocache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target test -t test-runner .
@@ -92,10 +92,6 @@ jobs:
             -v ${{ github.workspace }}/.uvcache:/tmp/uv-cache \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
-
-      # TODO: run test-wasi, but requires fixing the wasi tests first
-      # - name: "🧪 Run WASI tests (in Docker container)"
-      #   run: ...
 
       - name: "🔧 Fix artifact and cache permissions"
         if: always()
