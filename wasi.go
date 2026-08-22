@@ -64,10 +64,14 @@ import (
 	"unsafe"
 )
 
-// Prevent excessive memory access
+// Largest URL accepted by GetSignature.
 const maxUrlLength = 64 * 1024 // 64KB
-// Prevent excessive allocations
-const maxAllocSize = 1024 * 1024 // 1MB
+
+// Largest buffer Malloc will hand out. This has to cover the largest legitimate
+// input, which is a rule set rather than a URL: AppendRules accepts up to
+// MaxRulesSize, so a smaller ceiling here would make rule sets between the two
+// limits impossible to pass in at all.
+const maxAllocSize = MaxRulesSize
 
 // Memory arena to prevent garbage collection of allocations
 // Using a sync.Map for better concurrent performance
@@ -91,24 +95,18 @@ var memoryArena sync.Map // map[uint32][]byte
 //
 //go:wasmexport GetSignature
 func GetSignature(urlPtr, urlLen uint32) uint64 {
+	if urlLen > maxUrlLength {
+		return packError(fmt.Errorf("URL length %d exceeds maximum of %d bytes", urlLen, maxUrlLength))
+	}
+
 	// Read the URL string from WASM memory
 	url := ptrToString(urlPtr, urlLen)
 
 	signature, err := getSignature(url)
-
 	if err != nil {
-		// Return error indicator: pointer to error message with error bit set
-		errMsg := err.Error()
-		errPtr, errLen := stringToPtr(errMsg)
-		// Pack: [pointer:32][length:31|error_bit:1]
-		// Set bit 31 (0x80000000) in the length to indicate error
-		return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+		return packError(err)
 	}
-
-	// Return success: pointer to signature with error bit clear
-	sigPtr, sigLen := stringToPtr(signature)
-	// Pack: [pointer:32][length:32] with error bit 0
-	return uint64(sigPtr)<<32 | uint64(sigLen)
+	return packResult(signature)
 }
 
 // AppendRules parses and appends additional YAML rules at runtime.
@@ -124,15 +122,29 @@ func GetSignature(urlPtr, urlLen uint32) uint64 {
 //
 //go:wasmexport AppendRules
 func WasmAppendRules(rulesPtr, rulesLen uint32) uint64 {
-	rulesStr := ptrToString(rulesPtr, rulesLen)
-	if err := AppendRules([]byte(rulesStr)); err != nil {
-		errMsg := err.Error()
-		errPtr, errLen := stringToPtr(errMsg)
-		return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+	if rulesLen > MaxRulesSize {
+		return packError(fmt.Errorf("rules length %d exceeds maximum of %d bytes", rulesLen, MaxRulesSize))
 	}
 
-	msgPtr, msgLen := stringToPtr("OK")
-	return uint64(msgPtr)<<32 | uint64(msgLen)
+	rulesStr := ptrToString(rulesPtr, rulesLen)
+	if err := AppendRules([]byte(rulesStr)); err != nil {
+		return packError(err)
+	}
+	return packResult("OK")
+}
+
+// packError returns err packed for return to the host: a pointer to the message
+// with bit 31 of the length set. See the export documentation above.
+func packError(err error) uint64 {
+	errPtr, errLen := stringToPtr(err.Error())
+	return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+}
+
+// packResult returns a successful result packed for return to the host, with
+// the error bit clear.
+func packResult(result string) uint64 {
+	ptr, length := stringToPtr(result)
+	return uint64(ptr)<<32 | uint64(length)
 }
 
 // Helper to convert pointer and length to Go string
@@ -141,10 +153,9 @@ func ptrToString(ptr, length uint32) string {
 		fmt.Fprintf(os.Stderr, "[🧂 suola]: Invalid length: %d\n", length)
 		return ""
 	}
-	if length > maxUrlLength {
-		fmt.Fprintf(os.Stderr, "[🧂 suola]: URL length exceeds maximum allowed: %d\n", length)
-		return ""
-	}
+	// No length ceiling here: this helper is shared by GetSignature and
+	// AppendRules, whose limits differ by 32x, so each enforces its own before
+	// calling. The read is bounded by the allocation itself below.
 	// The pointer must be one handed out by Malloc -- that is the documented
 	// contract for every export taking a buffer -- so look it up rather than
 	// range-checking the address. This validates ownership exactly and bounds
