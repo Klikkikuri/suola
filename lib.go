@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"text/template"
 
 	"github.com/PuerkitoBio/purell"
 	"gopkg.in/yaml.v2"
@@ -31,7 +30,7 @@ type TemplateRule struct {
 	Template    string            `yaml:"template"`     // URL template to generate final URL
 	Transform   map[string]string `yaml:"transform"`    // Field transformations (e.g., lowercase)
 	_Regex      *regexp.Regexp    // Compiled regex
-	_Template   *template.Template
+	_Template   *urlTemplate
 }
 
 type RuleTestCase struct {
@@ -100,7 +99,7 @@ func compileSites(sites []SiteRule) error {
 	for i := range sites {
 		sites[i]._EffectiveWeight = calculateSiteWeight(&sites[i])
 		for j := range sites[i].Templates {
-			tmpl, err := template.New("urlTemplate").Option("missingkey=zero").Parse(sites[i].Templates[j].Template)
+			tmpl, err := parseURLTemplate(sites[i].Templates[j].Template)
 			if err != nil {
 				return fmt.Errorf("parsing template for domain %s: %w", sites[i].Domain, err)
 			}
@@ -244,12 +243,7 @@ func extractFields(u *url.URL, rule TemplateRule) (map[string]string, error) {
 
 // Format the extracted fields into the final URL
 func formatURL(u *url.URL, rule TemplateRule, fields map[string]string) (string, error) {
-	var output strings.Builder
-
-	if err := rule._Template.Execute(&output, fields); err != nil {
-		return "", fmt.Errorf("executing template: %w", err)
-	}
-	return output.String(), nil
+	return rule._Template.Render(fields), nil
 }
 
 // Process a given URL and match it with site rules

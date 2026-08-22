@@ -4,10 +4,12 @@ go 1.26
 
 require (
 	github.com/PuerkitoBio/purell v1.2.1
+	github.com/valyala/fasttemplate v1.2.2
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 )
