@@ -42,4 +42,10 @@ test:
 test-js: js
 	node test/js_smoke.cjs "$(BUILD_DIR)"
 
-.PHONY: build build-wasm build-python js wasi test test-js clean
+# Runs the same Go tests compiled for wasip1, so the package is verified as
+# TinyGo actually builds it rather than only natively. Needs a WASI runtime
+# (wasmtime) on PATH.
+test-wasi:
+	tinygo test -target=wasip1 -v github.com/Klikkikuri/suola
+
+.PHONY: build build-wasm build-python js wasi test test-js test-wasi clean
