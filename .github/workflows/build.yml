@@ -46,8 +46,8 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/.gocache
-            ${{ github.workspace }}/.pipcache
-          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+            ${{ github.workspace }}/.uvcache
+          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum', '**/uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-build-cache-
 
@@ -64,12 +64,12 @@ jobs:
 
       - name: "🏗️ Build python wheel (in Docker container)"
         run: |
-          mkdir -p ${{ github.workspace }}/.pipcache
+          mkdir -p ${{ github.workspace }}/.uvcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-builder -t python-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
-            -e PIP_CACHE_DIR=/tmp/pipcache \
-            -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
+            -e UV_CACHE_DIR=/tmp/uvcache \
+            -v ${{ github.workspace }}/.uvcache:/tmp/uvcache \
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
@@ -85,11 +85,11 @@ jobs:
 
       - name: "🧪 Run Python tests (in Docker container)"
         run: |
-          mkdir -p ${{ github.workspace }}/.pipcache
+          mkdir -p ${{ github.workspace }}/.uvcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-test -t python-test-runner .
           docker run --rm \
-            -e PIP_CACHE_DIR=/tmp/pipcache \
-            -v ${{ github.workspace }}/.pipcache:/tmp/pipcache \
+            -e UV_CACHE_DIR=/tmp/uvcache \
+            -v ${{ github.workspace }}/.uvcache:/tmp/uvcache \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
 
@@ -99,7 +99,7 @@ jobs:
 
       - name: "🔧 Fix artifact and cache permissions"
         if: always()
-        run: sudo chown -R $(id -u):$(id -g) build/ .gocache/ .pipcache/ || true
+        run: sudo chown -R $(id -u):$(id -g) build/ .gocache/ .uvcache/ || true
 
       - name: "⬆️ Upload artifacts"
         # Upload the build artifacts to the GitHub Actions workspace
