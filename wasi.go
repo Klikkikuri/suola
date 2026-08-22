@@ -60,6 +60,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -245,7 +246,10 @@ func init() {
 
 	// Check if custom rules path is provided via argv
 	// argv[0] is the program name, argv[1] would be the custom rules path
-	if len(os.Args) > 1 {
+	//
+	// Anything starting with "-" is a flag rather than a path, and must be left
+	// to whoever parses flags.
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		customRulesPath := os.Args[1]
 		fmt.Fprintf(os.Stderr, "[🧂 suola]: Loading custom rules from: %s\n", customRulesPath)
 		rulesData = mustReadConfig(customRulesPath)
