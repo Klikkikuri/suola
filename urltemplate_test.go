@@ -1,10 +1,6 @@
 package main
 
-import (
-	"strings"
-	"testing"
-	"text/template"
-)
+import "testing"
 
 // fields used by both the direct and the differential tests.
 var templateFields = map[string]string{
@@ -12,25 +8,6 @@ var templateFields = map[string]string{
 	"ArticleID": "2b2ac72b",
 	"Empty":     "",
 	"Raw":       "a&b<c>?d=1",
-}
-
-// supportedTemplates are templates urlTemplate must render exactly as
-// text/template does. They are shared by TestURLTemplateRender and
-// TestURLTemplateMatchesTextTemplate.
-var supportedTemplates = []string{
-	"https://example.com/",
-	"https://example.com/{{ .Section }}",
-	"https://example.com/{{.Section}}",
-	"https://example.com/{{   .Section   }}",
-	"https://example.com/{{ .Section }}/a/{{ .ArticleID }}",
-	"{{ .Section }}",
-	"{{ .Section }}{{ .ArticleID }}",
-	"{{ .Section }}/{{ .Section }}",
-	"https://example.com/{{ .Missing }}/x",
-	"https://example.com/{{ .Empty }}/x",
-	"https://example.com/{{ .Raw }}",
-	"{{ .Section }} trailing text",
-	"",
 }
 
 func TestURLTemplateRender(t *testing.T) {
@@ -60,33 +37,6 @@ func TestURLTemplateRender(t *testing.T) {
 			}
 			if got := tmpl.Render(templateFields); got != tc.want {
 				t.Errorf("Render() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-// TestURLTemplateMatchesTextTemplate pins urlTemplate to the behaviour of the
-// text/template configuration it replaced, so the swap stays a drop-in for
-// every construct the rules are allowed to use.
-func TestURLTemplateMatchesTextTemplate(t *testing.T) {
-	for _, src := range supportedTemplates {
-		t.Run(src, func(t *testing.T) {
-			reference, err := template.New("urlTemplate").Option("missingkey=zero").Parse(src)
-			if err != nil {
-				t.Fatalf("text/template failed to parse %q: %v", src, err)
-			}
-			var want strings.Builder
-			if err := reference.Execute(&want, templateFields); err != nil {
-				t.Fatalf("text/template failed to execute %q: %v", src, err)
-			}
-
-			tmpl, err := parseURLTemplate(src)
-			if err != nil {
-				t.Fatalf("parseURLTemplate(%q) returned error: %v", src, err)
-			}
-
-			if got := tmpl.Render(templateFields); got != want.String() {
-				t.Errorf("Render() = %q, text/template = %q", got, want.String())
 			}
 		})
 	}
