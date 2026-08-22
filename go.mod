@@ -1,6 +1,6 @@
 module github.com/Klikkikuri/suola
 
-go 1.24.2
+go 1.26
 
 require (
 	github.com/PuerkitoBio/purell v1.2.1

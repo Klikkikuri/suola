@@ -1,5 +1,5 @@
 # NOTICE: When updating base images, make sure they use the same base image (i.e. debian bookworm)
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 
 # Python interface
 ARG UV_VERSION=0.5.20
