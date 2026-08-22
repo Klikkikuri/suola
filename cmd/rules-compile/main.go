@@ -91,8 +91,10 @@ func readYAML(path string) (map[string]any, error) {
 }
 
 // yaml.v3 yields map[any]any for mappings with non-string keys, which
-// encoding/json cannot marshal. Convert those and reject keys that have no
-// JSON equivalent, rather than letting json.Marshal fail with less context.
+// encoding/json cannot marshal. Convert those, stringifying keys JSON has no
+// equivalent for -- a YAML document keyed by a number or bool is not a valid
+// rule set, and schema validation rejects the stringified key by name, which
+// points at the offending key far better than a marshalling error would.
 func toJSONValue(v any) any {
 	switch value := v.(type) {
 	case map[string]any:
