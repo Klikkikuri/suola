@@ -21,8 +21,8 @@ func appendRulesJS(this js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return "rules data required"
 	}
-	rulesYaml := args[0].String()
-	err := AppendRules([]byte(rulesYaml))
+	rulesJSON := args[0].String()
+	err := AppendRules([]byte(rulesJSON))
 	if err != nil {
 		return err.Error()
 	}

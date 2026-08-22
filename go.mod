@@ -4,8 +4,9 @@ go 1.26
 
 require (
 	github.com/PuerkitoBio/purell v1.2.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/valyala/fasttemplate v1.2.2
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

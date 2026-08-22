@@ -1,0 +1,121 @@
+name: "Publish rules"
+
+# Details about the workflow:
+# - Runs when a merge into main touches the rule set or the tooling that compiles it.
+# - Compiles rules.yaml into build/rules.json and verifies it against its own test cases.
+# - Uploads the compiled rules to the rahti data repository, which consumes them at runtime.
+#
+# Only the compiled JSON is published: rules.yaml is the authored source and stays here.
+# The upload follows the convention rahti already uses for data.json -- a PUT to the
+# contents API under the harbormaster bot identity (see rahti's config.yaml).
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'rules.yaml'
+      - 'docs/rules.schema.json'
+      - 'cmd/rules-compile/**'
+      - '.github/workflows/rules.yml'
+
+# Rules are published to a single file in another repository, so overlapping runs
+# would race on its blob SHA. Never cancel in progress: a cancelled run could leave
+# the newest rules unpublished.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RAHTI_REPO: Klikkikuri/rahti
+  RAHTI_RULES_PATH: rules.json
+  # The identity rahti's own bot commits under.
+  COMMITTER_NAME: "[🤖 bot] Klikkikuri harbormaster"
+  COMMITTER_EMAIL: "klikkikuri+satamamestari@protonmail.com"
+
+jobs:
+  publish:
+    name: "🧂 Compile and publish rules"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "🔄 Checkout code"
+        uses: actions/checkout@v7
+
+      - name: "🔧 Set up Go"
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: "🛠️ Compile rules"
+        run: make rules
+
+      # Publishing rules that fail their own test cases would break every consumer,
+      # so the rule set is verified before it leaves this repository. This is the
+      # native Go suite; the Wasm builds are covered by the build workflow.
+      - name: "🧪 Verify rules against their test cases"
+        run: make test
+
+      # GITHUB_TOKEN is scoped to this repository, so writing to rahti needs a token
+      # from the GitHub App installed there.
+      - name: "🔑 Mint a token for rahti"
+        id: rahti-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RAHTI_CLIENT_ID }}
+          private-key: ${{ secrets.RAHTI_CLIENT_PRIVATE_KEY }}
+          owner: Klikkikuri
+          repositories: rahti
+
+      - name: "⬆️ Publish rules to rahti"
+        env:
+          GH_TOKEN: ${{ steps.rahti-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          # Locally the compiled rules point at the schema by relative path, which
+          # does not resolve from inside rahti. Republish them against the schema's
+          # own canonical $id, read from the schema so the two cannot drift apart.
+          schema_url="$(jq -r '.["$id"]' docs/rules.schema.json)"
+          jq --arg url "${schema_url}" '.["$schema"] = $url' build/rules.json > rules.publish.json
+
+          # The contents API reports the file's git blob SHA, which is what
+          # hash-object computes locally -- so an unchanged rule set is a no-op
+          # rather than an empty commit.
+          #
+          # gh writes the error body to stdout on a 404, so the response is only
+          # trusted when it looks like a blob SHA. Anything else -- including the
+          # file not existing yet -- leaves it empty, which is how the API wants a
+          # file creation expressed.
+          remote_sha="$(gh api "repos/${RAHTI_REPO}/contents/${RAHTI_RULES_PATH}" --jq '.sha' 2>/dev/null || true)"
+          if ! printf '%s' "${remote_sha}" | grep -Eq '^[0-9a-f]{40}$'; then
+            remote_sha=""
+          fi
+          local_sha="$(git hash-object rules.publish.json)"
+
+          if [ "${remote_sha}" = "${local_sha}" ]; then
+            echo "::notice::${RAHTI_REPO}/${RAHTI_RULES_PATH} already at ${local_sha}, nothing to publish"
+            exit 0
+          fi
+
+          jq -n \
+            --arg message "chore(rules): rules update from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+            --arg content "$(base64 -w0 rules.publish.json)" \
+            --arg sha "${remote_sha}" \
+            --arg name "${COMMITTER_NAME}" \
+            --arg email "${COMMITTER_EMAIL}" \
+            '{
+               message: $message,
+               content: $content,
+               committer: {name: $name, email: $email},
+               author: {name: $name, email: $email}
+             } + (if $sha == "" then {} else {sha: $sha} end)' > payload.json
+
+          commit_url="$(gh api --method PUT "repos/${RAHTI_REPO}/contents/${RAHTI_RULES_PATH}" \
+            --input payload.json --jq '.commit.html_url')"
+          echo "::notice::Published rules to ${commit_url}"

@@ -9,11 +9,56 @@ Suola 🧂 provides two WebAssembly (Wasm) modules built from the same Go librar
 - URL normalization and hashing.
 - Support for both browser and WASI environments.
 
-## Signature rules (rules.yaml)
+## Signature rules (`rules.yaml`)
 
-Rules are embedded in the Wasm module, and the module will not work without them. The rules are defined in a YAML file (`rules.yaml`) that is read by the module at runtime.
+Rules are embedded in the Wasm module, and the module will not work without them. They are authored
+as YAML in `rules.yaml`, which is the source of truth, and compiled to JSON at build time.
 
-Signatures are generated using SHA-256 hashing. The input URL is normalized according to the rules defined in the `rules.yaml` file, and then the hash is computed. This ensures that the same URL will always produce the same signature, regardless of its original format.
+Signatures are generated using SHA-256 hashing. The input URL is normalized according to the rules
+defined in `rules.yaml`, and then the hash is computed. This ensures that the same URL will always
+produce the same signature, regardless of its original format.
+
+### Authoring and compiling rules
+
+The module parses **JSON only** — a YAML parser costs size and reflection the TinyGo builds should
+not carry — so `rules.yaml` is compiled before anything Go is built:
+
+```sh
+make rules
+```
+
+`cmd/rules-compile` validates `rules.yaml` against [`docs/rules.schema.json`](docs/rules.schema.json) and
+writes two generated files, neither of which is committed:
+
+- `build/rules.json`: the rules the module embeds, with the `tests` blocks stripped out.
+- `build/rules.tests.json`: those test cases, read by the Go and Python suites.
+
+Every `make` target that invokes the Go toolchain depends on `build/rules.json`, so `make build`
+and `make test` compile the rules for you. A plain `go build` or `go test` on a fresh clone fails
+with a missing-embed error until `make rules` has run once, because `go:embed` needs the file to
+exist.
+
+Referencing the schema from the top of `rules.yaml` gives editor validation while authoring:
+
+```yaml
+# yaml-language-server: $schema=./docs/rules.schema.json
+```
+
+### Publishing rules
+
+Merges into `main` that touch `rules.yaml`, the schema, or `cmd/rules-compile` run
+[`.github/workflows/rules.yml`](.github/workflows/rules.yml): the rules are compiled, verified
+against their own test cases, and the resulting `rules.json` is committed to the
+[rahti](https://github.com/Klikkikuri/rahti) data repository, which consumes them at runtime.
+The published copy references the schema by its canonical URL rather than the relative path used
+in `build/`, and an unchanged rule set is a no-op rather than an empty commit.
+
+Publishing needs a GitHub App installed on `rahti` with `Contents: read and write`, exposed to
+this repository as the `CLIENT_ID` and `CLIENT_PRIVATE_KEY` secrets.
+
+Anything that takes rules at runtime — the CLI's `-config` flag, the WASI module's `argv[1]`, and
+`AppendRules` from Python and JavaScript — takes this compiled JSON, not YAML. Convert a YAML rule
+set with `go run ./cmd/rules-compile -o rules.json <file>`, or with `yq -o=json`.
 
 URL normalization rules defined per domain. Site rules are evaluated in descending order of effective weight. Higher-weighted sites are evaluated first. If a site's templates do not match, evaluation falls through to the next matching site in weight order (e.g., `www.example.com` -> `example.com` -> `com` -> `""`).
 
@@ -31,7 +76,7 @@ sites:
     tests:
       - url: "input_url"
         expected: "expected_output"
-        signature: "sha256_hash"               # Can also use "sign"
+        signature: "sha256_hash"               # "sign" is a deprecated alias
 ```
 
 **Fields:**
@@ -101,6 +146,7 @@ This will generate the following files in the `build/` directory:
 
 - `js.wasm`: WebAssembly module for browser environments.
 - `wasi.wasm`: WebAssembly module for WASI environments.
+- `rules.json`: the compiled rules embedded in both modules, plus `rules.tests.json` alongside it.
 - `suola.js`: go javascript support file from go distribution.
 - `suola-*.whl`: Python wheels package, containing python support files and `wasi.wasm`.
 
@@ -135,7 +181,7 @@ The WASI module exports the following functions for host integration:
 **Initialization:**
 
 The rules are loaded during module initialization, so the host must initialize the module before
-calling any other export. A custom rules path may be passed as `argv[1]`.
+calling any other export. A path to a compiled JSON rule set may be passed as `argv[1]`.
 
 `wasi.wasm` is built as a shared library (`-buildmode=c-shared`) under either toolchain, making it a
 reactor module: call `_initialize`, which returns normally.
@@ -166,11 +212,13 @@ runtime = WasmRuntime()
 signature = runtime.get_signature("https://example.com/article")
 
 # Use custom rules file
-runtime_custom = WasmRuntime(custom_rules_path=Path("/path/to/custom_rules.yaml"))
+runtime_custom = WasmRuntime(custom_rules_path=Path("/path/to/custom_rules.json"))
 signature = runtime_custom.get_signature("https://example.com/article")
 ```
 
-**Note:** The custom rules file must be accessible to the WASI module. The Python interface automatically handles directory preopening for file access.
+**Note:** The custom rules file is compiled JSON, not YAML — see
+[Authoring and compiling rules](#authoring-and-compiling-rules). It must be accessible to the WASI
+module; the Python interface automatically handles directory preopening for file access.
 
 ### CLI Example / native Go
 
