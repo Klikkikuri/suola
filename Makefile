@@ -30,9 +30,9 @@ TINYGO ?= $(shell command -v tinygo)
 build: build-wasm build-python
 build-wasm: js wasi
 
-rules: $(RULES_JSON)
+rules: $(RULES_JSON) $(RULES_TESTS)
 
-$(RULES_JSON) $(RULES_TESTS): $(RULES_SRC) $(RULES_SCHEMA) $(wildcard cmd/rules-compile/*.go) | $(BUILD_DIR)
+$(RULES_JSON) $(RULES_TESTS) &: $(RULES_SRC) $(RULES_SCHEMA) $(wildcard cmd/rules-compile/*.go) | $(BUILD_DIR)
 	go run ./cmd/rules-compile \
 		-schema "$(RULES_SCHEMA)" \
 		-o "$(RULES_JSON)" \
