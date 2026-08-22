@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -15,7 +16,6 @@ import (
 	"sync/atomic"
 
 	"github.com/PuerkitoBio/purell"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -25,35 +25,39 @@ const (
 
 // Defines how to extract values from URL
 type TemplateRule struct {
-	Pattern     string            `yaml:"pattern"`      // Regex pattern to extract named groups
-	QueryParams map[string]string `yaml:"query_params"` // Query parameters to extract
-	Template    string            `yaml:"template"`     // URL template to generate final URL
-	Transform   map[string]string `yaml:"transform"`    // Field transformations (e.g., lowercase)
+	Pattern     string            `json:"pattern"`      // Regex pattern to extract named groups
+	QueryParams map[string]string `json:"query_params"` // Query parameters to extract
+	Template    string            `json:"template"`     // URL template to generate final URL
+	Transform   map[string]string `json:"transform"`    // Field transformations (e.g., lowercase)
 	_Regex      *regexp.Regexp    // Compiled regex
 	_Template   *urlTemplate
 }
 
 type RuleTestCase struct {
-	Url       string `yaml:"url"`
-	Expected  string `yaml:"expected"`
-	XFail     bool   `yaml:"xfail,omitempty"` // Expected to fail
-	Signature string `yaml:"signature,omitempty"`
+	Url       string `json:"url"`
+	Expected  string `json:"expected"`
+	XFail     bool   `json:"xfail,omitempty"` // Expected to fail
+	Signature string `json:"signature,omitempty"`
 }
 
 // SiteRule holds all extraction templates for a site
 type SiteRule struct {
-	Domain           string         `yaml:"domain"`           // Domain this applies to
-	Templates        []TemplateRule `yaml:"templates"`        // Multiple extraction templates
-	Tests            []RuleTestCase `yaml:"tests"`            // Tests for this rule
-	Weight           *int           `yaml:"weight,omitempty"` // Optional explicit priority weight
+	Domain           string         `json:"domain"`           // Domain this applies to
+	Templates        []TemplateRule `json:"templates"`        // Multiple extraction templates
+	Tests            []RuleTestCase `json:"tests"`            // Tests for this rule
+	Weight           *int           `json:"weight,omitempty"` // Optional explicit priority weight
 	_EffectiveWeight int            // Calculated weight for site evaluation priority
 }
 
 type Config struct {
-	Sites []SiteRule `yaml:"sites"`
+	Sites []SiteRule `json:"sites"`
 }
 
-//go:embed rules.yaml
+// The rules are authored as YAML and compiled to JSON by cmd/rules-compile;
+// see the rules target in the Makefile. The module parses JSON only, so the
+// Wasm builds carry no YAML parser.
+//
+//go:embed build/rules.json
 var DefaultCfgData []byte
 
 var (
@@ -139,8 +143,8 @@ func parseAndCompile(data []byte) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing YAML: %w", err)
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing rules JSON: %w", err)
 	}
 
 	if err := compileSites(cfg.Sites); err != nil {
@@ -151,7 +155,7 @@ func parseAndCompile(data []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-// Load and compile the YAML config, replacing any existing active rules.
+// Load and compile the JSON config, replacing any existing active rules.
 func LoadRules(data []byte) error {
 	cfg, err := parseAndCompile(data)
 	if err != nil {
@@ -165,7 +169,7 @@ func LoadRules(data []byte) error {
 	return nil
 }
 
-// AppendRules parses and compiles additional YAML rules, merging them with existing rules.
+// AppendRules parses and compiles additional JSON rules, merging them with existing rules.
 func AppendRules(data []byte) error {
 	cfg, err := parseAndCompile(data)
 	if err != nil {

@@ -44,7 +44,7 @@ class Suola(SuolaAPI):
         Initialize the Suola API with WASM runtime.
 
         :param wasm_module: Optional path to the WASI module. If not provided, it will be automatically located.
-        :param custom_rules: Optional path to a custom YAML rules file. If not provided, uses embedded default rules.
+        :param custom_rules: Optional path to a compiled JSON rules file. If not provided, uses embedded default rules.
         """
         if wasm_module is not None:
             wasm_module = Path(wasm_module)
@@ -77,15 +77,18 @@ class Suola(SuolaAPI):
 
     def append_rules(self, rules: str | Path | bytes) -> None:
         """
-        Append additional YAML rules at runtime.
+        Append additional JSON rules at runtime.
 
-        :param rules: Path to YAML rules file, YAML string, or bytes
+        Rules are authored as YAML in the repository but the module parses JSON only; compile
+        them with ``make rules`` (see ``cmd/rules-compile``) before passing them here.
+
+        :param rules: Path to a JSON rules file, JSON string, or bytes
 
         Note on string resolution:
-        If a `str` is passed, it is treated as literal YAML content if it contains newlines or
-        starts with 'sites:'. Otherwise, if it corresponds to an existing file path on disk,
-        it will be read from that file. To guarantee that a file path is never misinterpreted as
-        literal YAML, pass a `pathlib.Path` instance.
+        If a `str` is passed, it is treated as literal JSON content if it starts with '{'.
+        Otherwise, if it corresponds to an existing file path on disk, it will be read from that
+        file. To guarantee that a file path is never misinterpreted as literal JSON, pass a
+        `pathlib.Path` instance.
         """
         self._runtime.append_rules(rules)
         logger.debug("Appended additional rules")
@@ -117,7 +120,7 @@ if __name__ == "__main__":
     # Example 2: Using custom rules
     print("\n=== Example 2: Using Custom Rules ===")
     from pathlib import Path
-    custom_rules_path = Path(__file__).parent.parent.parent.parent / "test_custom_rules.yaml"
+    custom_rules_path = Path(__file__).parent.parent.parent.parent / "test_custom_rules.json"
     if custom_rules_path.exists():
         suola_custom = Suola(custom_rules=custom_rules_path)
         print(f"Initialized with custom rules: {custom_rules_path}")

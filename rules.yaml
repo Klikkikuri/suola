@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./docs/rules.schema.json
 
 # YAML rules for canonical URL generation for news websites.
 # When adding rules, ensure to include possibility of query parameters. Example:

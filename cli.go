@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "", "Path to YAML configuration file")
+	configPath := flag.String("config", "", "Path to a compiled JSON rules file (see `make rules`)")
 	urlInput := flag.String("url", "", "URL to process")
 	signFlag := flag.Bool("sign", false, "Generate signature of the final URL")
 	flag.Parse()

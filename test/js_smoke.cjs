@@ -14,7 +14,7 @@ const { TextEncoder, TextDecoder } = require("node:util");
 
 const buildDir = path.resolve(process.argv[2] || "build");
 
-// One signature pinned from rules.yaml. It is not there to re-test the rules --
+// One signature pinned from the rule set. It is not there to re-test the rules --
 // the Go and Python suites check every case -- but to catch js.wasm being built
 // from something other than the rules the other targets were built from. If a
 // rule legitimately changes, update this to match rules.yaml.
@@ -79,9 +79,9 @@ WebAssembly.instantiate(fs.readFileSync(path.join(buildDir, "js.wasm")), go.impo
       assert(typeof globalThis.appendRules === "function", `appendRules is ${typeof globalThis.appendRules}`);
     });
 
-    check("signs a known URL as rules.yaml expects", () => {
+    check("signs a known URL as the rules expect", () => {
       const signature = globalThis.hashUrl(KNOWN_URL);
-      assert(signature === KNOWN_SIGNATURE, `got ${signature}, rules.yaml expects ${KNOWN_SIGNATURE}`);
+      assert(signature === KNOWN_SIGNATURE, `got ${signature}, the rules expect ${KNOWN_SIGNATURE}`);
     });
 
     check("normalises before signing", () => {
@@ -95,13 +95,15 @@ WebAssembly.instantiate(fs.readFileSync(path.join(buildDir, "js.wasm")), go.impo
     });
 
     check("appends rules at runtime", () => {
-      const outcome = globalThis.appendRules(`
-sites:
-  - domain: "jsappended.example"
-    templates:
-      - pattern: "^/doc/(?P<ID>[^/]+)"
-        template: "https://jsappended.example/doc/{{ .ID }}"
-`);
+      const outcome = globalThis.appendRules(JSON.stringify({
+        sites: [{
+          domain: "jsappended.example",
+          templates: [{
+            pattern: "^/doc/(?P<ID>[^/]+)",
+            template: "https://jsappended.example/doc/{{ .ID }}",
+          }],
+        }],
+      }));
       assert(outcome === null, `appendRules reported: ${outcome}`);
 
       const signature = globalThis.hashUrl("https://jsappended.example/doc/42");
@@ -109,7 +111,7 @@ sites:
     });
 
     check("reports invalid rules", () => {
-      const outcome = globalThis.appendRules("sites: [this is not a site]");
+      const outcome = globalThis.appendRules('{"sites": "this is not a list of sites"}');
       assert(typeof outcome === "string" && outcome.length > 0, `got ${outcome}, expected an error message`);
     });
 

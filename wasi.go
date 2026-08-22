@@ -12,7 +12,8 @@
 // TinyGo and stock Go, so it exports _initialize; a module built as a plain
 // command exports _start instead, and hosts should call whichever is present.
 // Either way, rules are loaded by then (see init below), and a custom rules
-// path may be passed as argv[1].
+// path may be passed as argv[1]. Rules are JSON: the YAML source is compiled
+// by cmd/rules-compile at build time (see the rules target in the Makefile).
 //
 // Usage from Python (wasmtime-py):
 //
@@ -113,11 +114,11 @@ func GetSignature(urlPtr, urlLen uint32) uint64 {
 	return packResult(signature)
 }
 
-// AppendRules parses and appends additional YAML rules at runtime.
+// AppendRules parses and appends additional JSON rules at runtime.
 //
 // Parameters:
-//   - rulesPtr: Pointer to YAML string in WASM memory (allocated by caller with Malloc)
-//   - rulesLen: Length of YAML string in bytes
+//   - rulesPtr: Pointer to JSON string in WASM memory (allocated by caller with Malloc)
+//   - rulesLen: Length of JSON string in bytes
 //
 // Returns: uint64 packed as follows:
 //   - High 32 bits: Pointer to result string in WASM memory
