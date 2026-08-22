@@ -63,12 +63,37 @@ jobs:
 
       # GITHUB_TOKEN is scoped to this repository, so writing to rahti needs a token
       # from the GitHub App installed there.
+      #
+      # Some secret managers store PEM keys as a single line with "\n" escapes, and
+      # others store them base64-encoded; both need normalizing before token minting.
+      - name: "🧼 Normalize GitHub App private key"
+        id: rahti-key
+        env:
+          RAW_PRIVATE_KEY: ${{ secrets.RAHTI_CLIENT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          key="${RAW_PRIVATE_KEY//$'\r'/}"
+          if ! printf '%s' "${key}" | grep -q 'BEGIN .*PRIVATE KEY'; then
+            decoded="$(printf '%s' "${key}" | base64 -d 2>/dev/null || true)"
+            if printf '%s' "${decoded}" | grep -q 'BEGIN .*PRIVATE KEY'; then
+              key="${decoded}"
+            fi
+          fi
+          key="${key//\\n/$'\n'}"
+
+          {
+            echo 'value<<EOF'
+            printf '%s\n' "${key}"
+            echo 'EOF'
+          } >> "${GITHUB_OUTPUT}"
+
       - name: "🔑 Mint a token for rahti"
         id: rahti-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ secrets.RAHTI_CLIENT_ID }}
-          private-key: ${{ secrets.RAHTI_CLIENT_PRIVATE_KEY }}
+          private-key: ${{ steps.rahti-key.outputs.value }}
           owner: Klikkikuri
           repositories: rahti
 
