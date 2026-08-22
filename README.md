@@ -54,7 +54,7 @@ The published copy references the schema by its canonical URL rather than the re
 in `build/`, and an unchanged rule set is a no-op rather than an empty commit.
 
 Publishing needs a GitHub App installed on `rahti` with `Contents: read and write`, exposed to
-this repository as the `CLIENT_ID` and `CLIENT_PRIVATE_KEY` secrets.
+this repository as the `RAHTI_CLIENT_ID` and `RAHTI_CLIENT_PRIVATE_KEY` secrets.
 
 Anything that takes rules at runtime — the CLI's `-config` flag, the WASI module's `argv[1]`, and
 `AppendRules` from Python and JavaScript — takes this compiled JSON, not YAML. Convert a YAML rule
