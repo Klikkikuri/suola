@@ -3,6 +3,7 @@ Tests for WASM memory safety and garbage collection protection.
 
 NOTE: AI GENERATED TESTS
 """
+import ctypes
 import gc
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from suola.api import Suola
-from suola._wasm import WasmRuntime
+from suola._wasm import MAX_RULES_SIZE, MAX_URL_LENGTH, WasmRuntime
 
 
 class TestWasmMemorySafety:
@@ -89,11 +90,110 @@ class TestWasmMemorySafety:
         assert len(result) == 64
 
     def test_url_too_large(self, runtime):
-        """Test that URLs over 64KB are rejected."""
+        """The client-side guard rejects URLs over 64KB before any WASM call."""
         large_url = "https://example.com/" + "a" * (65 * 1024)
-        
+
         with pytest.raises(ValueError, match="URL too long"):
             runtime.get_signature(large_url)
+
+    def test_url_length_limit_enforced_by_module(self, runtime):
+        """The module enforces the URL limit itself, not just the Python guard.
+
+        Calls the export directly so the client-side check in get_signature is
+        bypassed; a host written against the raw ABI gets no such guard.
+        """
+        ptr = runtime.malloc_fn(runtime.store, 64)
+        assert ptr != 0
+        try:
+            result = runtime.get_signature_fn(runtime.store, ptr, MAX_URL_LENGTH + 1)
+        finally:
+            runtime.free_fn(runtime.store, ptr)
+
+        is_error, message = runtime._unpack_result(result)
+        assert is_error, f"oversized URL accepted, got {message!r}"
+        assert "exceeds maximum" in message
+
+    def test_rules_length_limit_enforced_by_module(self, runtime):
+        """AppendRules enforces MaxRulesSize, the limit the rule parser uses."""
+        ptr = runtime.malloc_fn(runtime.store, 64)
+        assert ptr != 0
+        try:
+            result = runtime.append_rules_fn(runtime.store, ptr, MAX_RULES_SIZE + 1)
+        finally:
+            runtime.free_fn(runtime.store, ptr)
+
+        is_error, message = runtime._unpack_result(result)
+        assert is_error, f"oversized rule set accepted, got {message!r}"
+        assert "exceeds maximum" in message
+
+    def test_malloc_limits(self, runtime):
+        """Malloc rejects empty and oversized requests, and serves the largest legitimate one.
+
+        The ceiling has to cover a full rule set: it is the largest buffer a
+        host legitimately needs to pass in, larger than any URL.
+        """
+        assert runtime.malloc_fn(runtime.store, 0) == 0, "zero-sized allocation should be refused"
+
+        ptr = runtime.malloc_fn(runtime.store, MAX_RULES_SIZE)
+        assert ptr != 0, "the largest legitimate input must be allocatable"
+        runtime.free_fn(runtime.store, ptr)
+
+        assert runtime.malloc_fn(runtime.store, MAX_RULES_SIZE + 1) == 0, "oversized allocation should be refused"
+
+    def test_pointer_must_come_from_malloc(self, runtime):
+        """Only base pointers from Malloc are accepted, and bad ones do not trap.
+
+        Ownership is what is validated, not the address: an interior offset
+        points at perfectly readable memory holding a valid URL, but is not a
+        buffer the module handed out, so it must still be refused.
+        """
+        url = b"https://www.iltalehti.fi/ulkomaat/a/51495a62"
+        offset = 8
+        ptr = runtime.malloc_fn(runtime.store, offset + len(url))
+        assert ptr != 0
+        try:
+            memory = runtime.memory.data_ptr(runtime.store)
+            ctypes.memmove(
+                ctypes.addressof(memory.contents) + ptr + offset,
+                (ctypes.c_ubyte * len(url)).from_buffer_copy(url),
+                len(url),
+            )
+            is_error, _ = runtime._unpack_result(
+                runtime.get_signature_fn(runtime.store, ptr + offset, len(url))
+            )
+            assert is_error, "interior pointer accepted; buffers must come from Malloc"
+        finally:
+            runtime.free_fn(runtime.store, ptr)
+
+        # Addresses the module never issued must fail gracefully. Trapping here
+        # would take the whole instance down instead of returning an error.
+        for bogus in (0, 12345, 0x7FFFFFF):
+            is_error, _ = runtime._unpack_result(runtime.get_signature_fn(runtime.store, bogus, 32))
+            assert is_error, f"pointer {bogus} was accepted"
+
+        # The instance must still be usable after every rejection.
+        assert len(runtime.get_signature("https://www.iltalehti.fi/ulkomaat/a/51495a62")) == 64
+
+    def test_freed_pointer_rejected(self, runtime):
+        """A pointer is no longer usable once it has been freed."""
+        url = b"https://www.iltalehti.fi/ulkomaat/a/51495a62"
+        ptr = runtime.malloc_fn(runtime.store, len(url))
+        assert ptr != 0
+
+        memory = runtime.memory.data_ptr(runtime.store)
+        ctypes.memmove(
+            ctypes.addressof(memory.contents) + ptr,
+            (ctypes.c_ubyte * len(url)).from_buffer_copy(url),
+            len(url),
+        )
+        # Works while the allocation is live.
+        is_error, _ = runtime._unpack_result(runtime.get_signature_fn(runtime.store, ptr, len(url)))
+        assert not is_error
+
+        runtime.free_fn(runtime.store, ptr)
+
+        is_error, _ = runtime._unpack_result(runtime.get_signature_fn(runtime.store, ptr, len(url)))
+        assert is_error, "freed pointer was still accepted"
 
     def test_empty_url(self, suola):
         """Test that empty URLs are rejected."""
@@ -151,13 +251,6 @@ class TestWasmMemorySafety:
         except RuntimeError:
             # It's ok if there's no matching rule
             pass
-
-    def test_malloc_limits(self, runtime):
-        """Test that Malloc respects size limits."""
-        # This should work - allocate for a normal URL
-        url = "https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b"
-        result = runtime.get_signature(url)
-        assert len(result) == 64
 
     def test_memory_pool_stress(self, suola):
         """Stress test the memory pool with many allocations and GC cycles."""
