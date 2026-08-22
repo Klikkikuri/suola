@@ -74,18 +74,19 @@ jobs:
           set -euo pipefail
 
           key="${RAW_PRIVATE_KEY//$'\r'/}"
+          key="${key//\\n/$'\n'}"
           if ! printf '%s' "${key}" | grep -q 'BEGIN .*PRIVATE KEY'; then
             decoded="$(printf '%s' "${key}" | base64 -d 2>/dev/null || true)"
             if printf '%s' "${decoded}" | grep -q 'BEGIN .*PRIVATE KEY'; then
               key="${decoded}"
             fi
           fi
-          key="${key//\\n/$'\n'}"
 
+          delimiter="__RAHTI_PRIVATE_KEY_$(openssl rand -hex 16)__"
           {
-            echo 'value<<EOF'
+            printf 'value<<%s\n' "${delimiter}"
             printf '%s\n' "${key}"
-            echo 'EOF'
+            printf '%s\n' "${delimiter}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: "🔑 Mint a token for rahti"
