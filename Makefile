@@ -2,7 +2,12 @@ BUILD_DIR := $(shell pwd)/build
 BUILD_WASI := $(BUILD_DIR)/wasi.wasm
 BUILD_JS := $(BUILD_DIR)/js.wasm
 BUILD_JS_WASM_EXEC := $(BUILD_DIR)/wasm_exec.js
-LD_FLAGS := -s -w
+
+# The Wasm modules are built with TinyGo, which produces roughly 7x smaller
+# output than the stock Go toolchain. Stock Go is still what development uses:
+# the native CLI (cli.go) and `make test`, neither of which targets Wasm.
+# -no-debug strips DWARF and -opt=z optimizes for size.
+TINYGO_FLAGS := -no-debug -opt=z
 
 build: build-wasm build-python
 build-wasm: js wasi
@@ -10,13 +15,17 @@ build-wasm: js wasi
 $(BUILD_DIR):
 	mkdir -p "$(BUILD_DIR)"
 
-js: $(BUILD_DIR)
-	GOOS=js GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_JS)" lib.go js.go
-	# Copy JS support file provided with Go along with it's license notice.
-	cp -f "$(shell go env GOROOT)/lib/wasm/wasm_exec.js" "$(BUILD_JS_WASM_EXEC)"
 
+# build tags in js.go/wasi.go select the right file.
+js: $(BUILD_DIR)
+	tinygo build -target=wasm $(TINYGO_FLAGS) -o "$(BUILD_JS)" .
+	# Copy JS support file provided with TinyGo along with it's license notice.
+	cp -f "$(shell tinygo env TINYGOROOT)/targets/wasm_exec.js" "$(BUILD_JS_WASM_EXEC)"
+
+# Built as a shared library, so the module exports _initialize instead of
+# _start; see the initialization notes in wasi.go.
 wasi: $(BUILD_DIR)
-	GOOS=wasip1 GOARCH=wasm go build -ldflags="$(LD_FLAGS)" -o "$(BUILD_WASI)" lib.go wasi.go
+	tinygo build -target=wasip1 -buildmode=c-shared $(TINYGO_FLAGS) -o "$(BUILD_WASI)" .
 
 build-python: $(BUILD_DIR) $(BUILD_WASI)
 	# Build the Python wheel.
@@ -28,7 +37,4 @@ clean:
 test:
 	go test -v github.com/Klikkikuri/suola
 
-test-wasi:
-	go test -timeout 30s -v -run TestWasiProgram github.com/Klikkikuri/suola
-
-.PHONY: build js wasi python test-wasi test clean
+.PHONY: build build-wasm build-python js wasi test clean
