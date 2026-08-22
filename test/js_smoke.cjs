@@ -40,10 +40,21 @@ function assert(condition, message) {
 }
 
 // wasm_exec.js expects a browser-ish global environment.
+//
+// globalThis.fs is deliberately left unset: wasm_exec.js then installs its own
+// shim, which completes stdout writes synchronously. Handing it Node's real fs
+// makes every write asynchronous, and a stock-Go module printing from inside a
+// callback then blocks forever waiting for an event loop turn that cannot come
+// while the call is in progress ("all goroutines are asleep - deadlock").
 globalThis.require = require;
-globalThis.fs = fs;
 globalThis.TextEncoder = TextEncoder;
 globalThis.TextDecoder = TextDecoder;
+// The stock Go wasm_exec.js refuses to load without globalThis.crypto, which
+// Node only exposes as a global from v19 on. TinyGo's copy does not need it,
+// but the shim is harmless there.
+if (!globalThis.crypto) {
+  globalThis.crypto = require("node:crypto").webcrypto;
+}
 
 for (const name of ["js.wasm", "wasm_exec.js"]) {
   if (!fs.existsSync(path.join(buildDir, name))) {
