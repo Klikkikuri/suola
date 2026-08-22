@@ -101,7 +101,10 @@ func GetSignature(urlPtr, urlLen uint32) uint64 {
 	}
 
 	// Read the URL string from WASM memory
-	url := ptrToString(urlPtr, urlLen)
+	url, err := ptrToString(urlPtr, urlLen)
+	if err != nil {
+		return packError(err)
+	}
 
 	signature, err := getSignature(url)
 	if err != nil {
@@ -127,8 +130,11 @@ func WasmAppendRules(rulesPtr, rulesLen uint32) uint64 {
 		return packError(fmt.Errorf("rules length %d exceeds maximum of %d bytes", rulesLen, MaxRulesSize))
 	}
 
-	rulesStr := ptrToString(rulesPtr, rulesLen)
-	if err := AppendRules([]byte(rulesStr)); err != nil {
+	rules, err := ptrToBytes(rulesPtr, rulesLen)
+	if err != nil {
+		return packError(err)
+	}
+	if err := AppendRules(rules); err != nil {
 		return packError(err)
 	}
 	return packResult("OK")
@@ -148,36 +154,33 @@ func packResult(result string) uint64 {
 	return uint64(ptr)<<32 | uint64(length)
 }
 
-// Helper to convert pointer and length to Go string
-func ptrToString(ptr, length uint32) string {
+// Helper to resolve a host buffer to the bytes it holds.
+//
+// The pointer must be one handed out by Malloc -- that is the documented
+// contract for every export taking a buffer
+func ptrToBytes(ptr, length uint32) ([]byte, error) {
 	if length == 0 {
-		fmt.Fprintf(os.Stderr, "[🧂 suola]: Invalid length: %d\n", length)
-		return ""
+		return nil, fmt.Errorf("invalid buffer length: %d", length)
 	}
-	// No length ceiling here: this helper is shared by GetSignature and
-	// AppendRules, whose limits differ by 32x, so each enforces its own before
-	// calling. The read is bounded by the allocation itself below.
-	// The pointer must be one handed out by Malloc -- that is the documented
-	// contract for every export taking a buffer -- so look it up rather than
-	// range-checking the address. This validates ownership exactly and bounds
-	// the read by the allocation's own length.
-	//
-	// It replaces a fixed 16 MB address ceiling, which silently returned "" for
-	// perfectly valid buffers once the heap grew past it. Nothing kept
-	// allocations below that mark: result buffers from stringToPtr stay in
-	// memoryArena for the host to read and are never freed, so linear memory
-	// grows steadily under repeated calls.
 	value, ok := memoryArena.Load(ptr)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "[🧂 suola]: Invalid pointer: %d\n", ptr)
-		return ""
+		return nil, fmt.Errorf("invalid pointer %d: not a buffer returned by Malloc", ptr)
 	}
 	buf, ok := value.([]byte)
 	if !ok || uint32(len(buf)) < length {
-		fmt.Fprintf(os.Stderr, "[🧂 suola]: Invalid buffer at pointer: %d\n", ptr)
-		return ""
+		return nil, fmt.Errorf("invalid buffer at pointer %d: length %d exceeds the allocation", ptr, length)
 	}
-	return string(buf[:length])
+	return buf[:length], nil
+}
+
+// Helper to convert pointer and length to Go string. The returned string copies
+// the buffer, so it outlives a Free by the host.
+func ptrToString(ptr, length uint32) (string, error) {
+	buf, err := ptrToBytes(ptr, length)
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
 }
 
 // Helper to allocate string in WASM memory and return pointer + length

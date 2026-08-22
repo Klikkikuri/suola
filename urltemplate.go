@@ -79,6 +79,6 @@ func (t *urlTemplate) Render(fields map[string]string) string {
 	return t.template.ExecuteFuncString(func(w io.Writer, tag string) (int, error) {
 		// Every tag was validated by parseURLTemplate, so this cannot fail.
 		name, _ := fieldName(tag)
-		return w.Write([]byte(fields[name]))
+		return io.WriteString(w, fields[name])
 	})
 }
