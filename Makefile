@@ -42,10 +42,27 @@ test:
 test-js: js
 	node test/js_smoke.cjs "$(BUILD_DIR)"
 
+# The wasmtime CLI and the wasmtime-py the Python suite uses must be the same
+# version, or the two halves of the test suite run on different runtimes. Their
+# release numbering is shared, so comparing them directly is enough. The CLI is
+# pinned by ARG WASMTIME_VERSION in the Dockerfile, wasmtime-py by python/uv.lock.
+check-wasmtime:
+	@cli="$$(wasmtime --version | awk '{ print $$2 }')"; \
+	lib="$$(grep -A1 '^name = "wasmtime"$$' python/uv.lock | grep '^version' | head -1 | cut -d'"' -f2)"; \
+	if [ -z "$$lib" ]; then \
+		echo "could not read the wasmtime version from python/uv.lock"; exit 1; \
+	elif [ "$$cli" != "$$lib" ]; then \
+		echo "wasmtime mismatch: CLI $$cli, wasmtime-py $$lib"; \
+		echo "update ARG WASMTIME_VERSION in the Dockerfile, or run: uv lock --upgrade-package wasmtime"; \
+		exit 1; \
+	else \
+		echo "wasmtime CLI and wasmtime-py both $$cli"; \
+	fi
+
 # Runs the same Go tests compiled for wasip1, so the package is verified as
 # TinyGo actually builds it rather than only natively. Needs a WASI runtime
 # (wasmtime) on PATH.
-test-wasi:
+test-wasi: check-wasmtime
 	tinygo test -target=wasip1 -v github.com/Klikkikuri/suola
 
-.PHONY: build build-wasm build-python js wasi test test-js test-wasi clean
+.PHONY: build build-wasm build-python js wasi test test-js test-wasi check-wasmtime clean
