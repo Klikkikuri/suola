@@ -7,8 +7,11 @@ from typing import Optional, cast
 import wasmtime
 from .util import get_data_dir
 
-# Prevent excessively large URLs
+# Mirrors the limits enforced by the WASM module (see wasi.go and lib.go).
+# Checking them here turns an oversized input into a clear Python error instead
+# of a round trip that comes back as a packed error string.
 MAX_URL_LENGTH = 64 * 1024
+MAX_RULES_SIZE = 2 * 1024 * 1024
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +219,9 @@ class WasmRuntime:
         rules_len = len(rules_bytes)
         if rules_len == 0:
             raise ValueError("Rules data cannot be empty")
+
+        if rules_len > MAX_RULES_SIZE:
+            raise ValueError(f"Rules too large: {rules_len} bytes (max {MAX_RULES_SIZE})")
 
         rules_ptr = self.malloc_fn(self.store, rules_len)
         if rules_ptr == 0:
