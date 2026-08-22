@@ -3,11 +3,18 @@ BUILD_WASI := $(BUILD_DIR)/wasi.wasm
 BUILD_JS := $(BUILD_DIR)/js.wasm
 BUILD_JS_WASM_EXEC := $(BUILD_DIR)/wasm_exec.js
 
-# The Wasm modules are built with TinyGo, which produces roughly 7x smaller
-# output than the stock Go toolchain. Stock Go is still what development uses:
-# the native CLI (cli.go) and `make test`, neither of which targets Wasm.
+# The Wasm modules are built with TinyGo, which produces roughly 5x smaller
+# output than the stock Go toolchain. Stock Go is what development otherwise
+# uses: the native CLI (cli.go) and `make test`, neither of which targets Wasm.
 # -no-debug strips DWARF and -opt=z optimizes for size.
 TINYGO_FLAGS := -no-debug -opt=z
+
+# When TinyGo is not installed, the js/wasi/test-wasi targets fall back to the
+# stock Go toolchain, so the tree stays buildable without it. The fallback is
+# for local work only: the modules are much larger. CI and releases build in a
+# container that has TinyGo (see the Dockerfile), and setting TINYGO=tinygo
+# makes a missing TinyGo a hard failure rather than a silent fallback.
+TINYGO ?= $(shell command -v tinygo)
 
 build: build-wasm build-python
 build-wasm: js wasi
@@ -17,15 +24,26 @@ $(BUILD_DIR):
 
 
 # build tags in js.go/wasi.go select the right file.
-js: $(BUILD_DIR)
+js: $(if $(TINYGO),js-tinygo,js-go)
+wasi: $(if $(TINYGO),wasi-tinygo,wasi-go)
+
+js-tinygo: $(BUILD_DIR)
 	tinygo build -target=wasm $(TINYGO_FLAGS) -o "$(BUILD_JS)" .
 	# Copy JS support file provided with TinyGo along with it's license notice.
 	cp -f "$(shell tinygo env TINYGOROOT)/targets/wasm_exec.js" "$(BUILD_JS_WASM_EXEC)"
 
+js-go: $(BUILD_DIR)
+	GOOS=js GOARCH=wasm go build -ldflags=-w -o "$(BUILD_JS)" .
+	# Each toolchain ships its own wasm_exec.js; they are not interchangeable.
+	cp -f "$(shell go env GOROOT)/lib/wasm/wasm_exec.js" "$(BUILD_JS_WASM_EXEC)"
+
 # Built as a shared library, so the module exports _initialize instead of
 # _start; see the initialization notes in wasi.go.
-wasi: $(BUILD_DIR)
+wasi-tinygo: $(BUILD_DIR)
 	tinygo build -target=wasip1 -buildmode=c-shared $(TINYGO_FLAGS) -o "$(BUILD_WASI)" .
+
+wasi-go: $(BUILD_DIR)
+	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -ldflags=-w -o "$(BUILD_WASI)" .
 
 build-python: $(BUILD_DIR) $(BUILD_WASI)
 	# Build the Python wheel.
@@ -59,10 +77,18 @@ check-wasmtime:
 		echo "wasmtime CLI and wasmtime-py both $$cli"; \
 	fi
 
-# Runs the same Go tests compiled for wasip1, so the package is verified as
-# TinyGo actually builds it rather than only natively. Needs a WASI runtime
-# (wasmtime) on PATH.
-test-wasi: check-wasmtime
+# Runs the same Go tests compiled for wasip1, so the package is verified as the
+# Wasm toolchain actually builds it rather than only natively. Needs a WASI
+# runtime (wasmtime) on PATH.
+test-wasi: check-wasmtime $(if $(TINYGO),test-wasi-tinygo,test-wasi-go)
+
+test-wasi-tinygo:
 	tinygo test -target=wasip1 -v github.com/Klikkikuri/suola
 
-.PHONY: build build-wasm build-python js wasi test test-js test-wasi check-wasmtime clean
+test-wasi-go:
+	GOOS=wasip1 GOARCH=wasm go test \
+		-exec "$(shell go env GOROOT)/lib/wasm/go_wasip1_wasm_exec" \
+		-v github.com/Klikkikuri/suola
+
+.PHONY: build build-wasm build-python js js-tinygo js-go wasi wasi-tinygo wasi-go \
+	test test-js test-wasi test-wasi-tinygo test-wasi-go check-wasmtime clean

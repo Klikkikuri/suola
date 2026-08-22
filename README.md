@@ -84,7 +84,7 @@ may contain characters that need encoding.
 ## Prerequisites
 
 - Go 1.26 or later, for development and tests
-- TinyGo 0.41 or later, which builds the Wasm modules
+- TinyGo 0.41 or later, which builds the Wasm modules (optional locally; see below)
 - `make` utility
 - A WASI runtime (e.g., Wasmtime) for testing WASI modules
 
@@ -96,13 +96,19 @@ To build the modules, run the following command:
 make build
 ```
 
-The Wasm modules are built with TinyGo; stock Go is used only for development and `make test`.
+The Wasm modules are built with TinyGo; stock Go is used for development and `make test`.
 This will generate the following files in the `build/` directory:
 
 - `js.wasm`: WebAssembly module for browser environments.
 - `wasi.wasm`: WebAssembly module for WASI environments.
 - `suola.js`: go javascript support file from go distribution.
 - `suola-*.whl`: Python wheels package, containing python support files and `wasi.wasm`.
+
+When TinyGo is not installed, `js`, `wasi` and `test-wasi` fall back to stock Go, so the tree stays
+buildable and testable without it. The modules work the same but are roughly 5x larger, so the
+fallback is for local work only. Either toolchain can be picked explicitly with the `-tinygo` and
+`-go` variants of those targets (`make js-go`, `make wasi-tinygo`, ...). CI builds in a container
+that has TinyGo and pins `TINYGO=tinygo`, so a missing TinyGo fails the build there.
 
 ## Usage
 
@@ -131,13 +137,13 @@ The WASI module exports the following functions for host integration:
 The rules are loaded during module initialization, so the host must initialize the module before
 calling any other export. A custom rules path may be passed as `argv[1]`.
 
-`wasi.wasm` is built with TinyGo as a shared library (`-buildmode=c-shared`), making it a reactor
-module: call `_initialize`, which returns normally.
+`wasi.wasm` is built as a shared library (`-buildmode=c-shared`) under either toolchain, making it a
+reactor module: call `_initialize`, which returns normally.
 
-If you build the module with stock Go instead, you get a command that exports `_start` rather than
-`_initialize`. Hosts that want to accept either should call whichever the module exports, preferring
-`_initialize` — a module exporting it is a library and must not be started as a command. The bundled
-Python interface does this.
+A module built as a plain command exports `_start` rather than `_initialize`. Hosts that want to
+accept either should call whichever the module exports, preferring `_initialize` — a module
+exporting it is a library and must not be started as a command. The bundled Python interface does
+this.
 
 **Memory Management:**
 - Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use.

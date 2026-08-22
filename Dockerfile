@@ -62,6 +62,12 @@ COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
 RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
     tinygo version
 
+# The Makefile falls back to stock Go when TinyGo is missing, which is a
+# convenience for local work only. Every image built here has TinyGo, so pin
+# it: a fallback in CI or a release build would silently ship the much larger
+# stock-Go modules, and this turns that into a build failure instead.
+ENV TINYGO=tinygo
+
 RUN --mount=type=bind,source=go.mod,target=go.mod \
     --mount=type=bind,source=go.sum,target=go.sum \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
