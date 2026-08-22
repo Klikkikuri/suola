@@ -68,8 +68,8 @@ jobs:
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-builder -t python-builder .
           # Run the build entrypoint inside the container
           docker run --rm \
-            -e UV_CACHE_DIR=/tmp/uvcache \
-            -v ${{ github.workspace }}/.uvcache:/tmp/uvcache \
+            -e UV_CACHE_DIR=/tmp/uv-cache \
+            -v ${{ github.workspace }}/.uvcache:/tmp/uv-cache \
             -v ${{ github.workspace }}/build:/app/build \
             python-builder
 
@@ -88,8 +88,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/.uvcache
           docker buildx build --load --cache-from type=gha --cache-to type=gha,mode=max --target python-test -t python-test-runner .
           docker run --rm \
-            -e UV_CACHE_DIR=/tmp/uvcache \
-            -v ${{ github.workspace }}/.uvcache:/tmp/uvcache \
+            -e UV_CACHE_DIR=/tmp/uv-cache \
+            -v ${{ github.workspace }}/.uvcache:/tmp/uv-cache \
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
 
