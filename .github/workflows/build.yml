@@ -47,7 +47,7 @@ jobs:
           path: |
             ${{ github.workspace }}/.gocache
             ${{ github.workspace }}/.uvcache
-          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum', '**/uv.lock') }}
+          key: ${{ runner.os }}-build-cache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-build-cache-
 
