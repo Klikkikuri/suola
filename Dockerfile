@@ -195,7 +195,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Loads build/js.wasm for `make test-js`
         nodejs \
         # Bookworm support file for TinyGo
-        libstdc++6
+        libstdc++6 \
+        # tools
+        ripgrep \
+        fd-find \
+        jq yq \
+    # Link fd-find to fd, so that coding agents can find it in the PATH
+    && ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
 COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
 RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
