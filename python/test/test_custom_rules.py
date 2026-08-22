@@ -258,6 +258,39 @@ sites:
         assert sig_appended
         assert len(sig_appended) == 64
 
+    def test_append_rules_larger_than_url_limit(self):
+        """Rule sets above the 64KB URL limit must still be accepted.
+
+        ptrToString used to cap every buffer at the URL limit, so a rule set
+        larger than that was truncated to "" inside the module and surfaced as
+        "rules data is empty" -- 32x below the 2MB the parser allows.
+        """
+        # Pad with enough sites to push the payload well past 64KB. Built with
+        # replace() rather than format(), which would eat the {{ }} in the
+        # rule templates.
+        site = (
+            '  - domain: "padIDX.example"\n'
+            "    templates:\n"
+            '      - pattern: "^/(?P<ID>[^/]+)"\n'
+            '        template: "https://padIDX.example/{{ .ID }}"\n'
+        )
+        padding = "".join(site.replace("IDX", str(i)) for i in range(800))
+        big_rules_yaml = (
+            "sites:\n"
+            '  - domain: "largeruleset.example"\n'
+            "    templates:\n"
+            '      - pattern: "^/doc/(?P<ID>[^/]+)"\n'
+            '        template: "https://largeruleset.example/doc/{{ .ID }}"\n'
+            + padding
+        )
+        assert len(big_rules_yaml.encode("utf-8")) > 64 * 1024, "payload must exceed the URL limit"
+
+        runtime = WasmRuntime()
+        runtime.append_rules(big_rules_yaml)
+
+        signature = runtime.get_signature("https://largeruleset.example/doc/42")
+        assert len(signature) == 64
+
     def test_suola_api_append_rules(self):
         """Test appending additional rules at runtime via Suola high-level API."""
         from suola.api import Suola

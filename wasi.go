@@ -7,8 +7,16 @@
 // It uses a memory arena pattern to prevent garbage collection of allocations
 // that are accessed from the host (Python/JavaScript).
 //
+// Initialization: the module must be initialized before any export is called,
+// and how depends on which toolchain built it. A stock Go build is a command
+// and exports _start; a TinyGo build is a shared library (buildmode=c-shared)
+// and exports _initialize instead. Hosts should call whichever is present.
+// Either way, rules are loaded by then (see init below), and a custom rules
+// path may be passed as argv[1].
+//
 // Usage from Python (wasmtime-py):
 //
+//  0. Call _initialize (TinyGo build) or _start (stock Go build)
 //  1. Call Malloc(size) to allocate a buffer for input
 //  2. Write your data to the returned pointer
 //  3. Call GetSignature(ptr, len) to process the URL
@@ -52,14 +60,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"unsafe"
 )
 
-// Prevent excessive memory access
+// Largest URL accepted by GetSignature.
 const maxUrlLength = 64 * 1024 // 64KB
-// Prevent excessive allocations
-const maxAllocSize = 1024 * 1024 // 1MB
+
+// Largest buffer Malloc will hand out. This has to cover the largest legitimate
+// input, which is a rule set rather than a URL: AppendRules accepts up to
+// MaxRulesSize, so a smaller ceiling here would make rule sets between the two
+// limits impossible to pass in at all.
+const maxAllocSize = MaxRulesSize
 
 // Memory arena to prevent garbage collection of allocations
 // Using a sync.Map for better concurrent performance
@@ -83,24 +96,21 @@ var memoryArena sync.Map // map[uint32][]byte
 //
 //go:wasmexport GetSignature
 func GetSignature(urlPtr, urlLen uint32) uint64 {
-	// Read the URL string from WASM memory
-	url := ptrToString(urlPtr, urlLen)
-
-	signature, err := getSignature(url)
-
-	if err != nil {
-		// Return error indicator: pointer to error message with error bit set
-		errMsg := err.Error()
-		errPtr, errLen := stringToPtr(errMsg)
-		// Pack: [pointer:32][length:31|error_bit:1]
-		// Set bit 31 (0x80000000) in the length to indicate error
-		return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+	if urlLen > maxUrlLength {
+		return packError(fmt.Errorf("URL length %d exceeds maximum of %d bytes", urlLen, maxUrlLength))
 	}
 
-	// Return success: pointer to signature with error bit clear
-	sigPtr, sigLen := stringToPtr(signature)
-	// Pack: [pointer:32][length:32] with error bit 0
-	return uint64(sigPtr)<<32 | uint64(sigLen)
+	// Read the URL string from WASM memory
+	url, err := ptrToString(urlPtr, urlLen)
+	if err != nil {
+		return packError(err)
+	}
+
+	signature, err := getSignature(url)
+	if err != nil {
+		return packError(err)
+	}
+	return packResult(signature)
 }
 
 // AppendRules parses and appends additional YAML rules at runtime.
@@ -116,31 +126,61 @@ func GetSignature(urlPtr, urlLen uint32) uint64 {
 //
 //go:wasmexport AppendRules
 func WasmAppendRules(rulesPtr, rulesLen uint32) uint64 {
-	rulesStr := ptrToString(rulesPtr, rulesLen)
-	if err := AppendRules([]byte(rulesStr)); err != nil {
-		errMsg := err.Error()
-		errPtr, errLen := stringToPtr(errMsg)
-		return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+	if rulesLen > MaxRulesSize {
+		return packError(fmt.Errorf("rules length %d exceeds maximum of %d bytes", rulesLen, MaxRulesSize))
 	}
 
-	msgPtr, msgLen := stringToPtr("OK")
-	return uint64(msgPtr)<<32 | uint64(msgLen)
+	rules, err := ptrToBytes(rulesPtr, rulesLen)
+	if err != nil {
+		return packError(err)
+	}
+	if err := AppendRules(rules); err != nil {
+		return packError(err)
+	}
+	return packResult("OK")
 }
 
-// Helper to convert pointer and length to Go string
-func ptrToString(ptr, length uint32) string {
+// packError returns err packed for return to the host: a pointer to the message
+// with bit 31 of the length set. See the export documentation above.
+func packError(err error) uint64 {
+	errPtr, errLen := stringToPtr(err.Error())
+	return uint64(errPtr)<<32 | uint64(errLen|0x80000000)
+}
+
+// packResult returns a successful result packed for return to the host, with
+// the error bit clear.
+func packResult(result string) uint64 {
+	ptr, length := stringToPtr(result)
+	return uint64(ptr)<<32 | uint64(length)
+}
+
+// Helper to resolve a host buffer to the bytes it holds.
+//
+// The pointer must be one handed out by Malloc -- that is the documented
+// contract for every export taking a buffer
+func ptrToBytes(ptr, length uint32) ([]byte, error) {
 	if length == 0 {
-		return ""
+		return nil, fmt.Errorf("invalid buffer length: %d", length)
 	}
-	if length > maxUrlLength {
-		return ""
+	value, ok := memoryArena.Load(ptr)
+	if !ok {
+		return nil, fmt.Errorf("invalid pointer %d: not a buffer returned by Malloc", ptr)
 	}
-	// Validate pointer is non-null and within reasonable bounds
-	if ptr == 0 || ptr > 0xFFFFFF {
-		return ""
+	buf, ok := value.([]byte)
+	if !ok || uint32(len(buf)) < length {
+		return nil, fmt.Errorf("invalid buffer at pointer %d: length %d exceeds the allocation", ptr, length)
 	}
-	bytes := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), length)
-	return string(bytes)
+	return buf[:length], nil
+}
+
+// Helper to convert pointer and length to Go string. The returned string copies
+// the buffer, so it outlives a Free by the host.
+func ptrToString(ptr, length uint32) (string, error) {
+	buf, err := ptrToBytes(ptr, length)
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
 }
 
 // Helper to allocate string in WASM memory and return pointer + length
@@ -191,13 +231,28 @@ func Free(ptr uint32) {
 	memoryArena.Delete(ptr)
 }
 
-func main() {
+// Rules are loaded during initialization rather than from main, so that the
+// module works in both shapes it is built as:
+//
+//   - Stock Go (buildmode=default) links a command that the host starts via
+//     _start, which runs init then main.
+//   - TinyGo builds this as a shared library (buildmode=c-shared), a reactor
+//     module: the host calls _initialize, main is never run, and TinyGo panics
+//     in runtime.wasmExportCheckRun if a //go:wasmexport is called after main
+//     would have returned.
+//
+// init covers both: it is the only hook that runs before the exports become
+// callable under either shape.
+func init() {
 	var rulesData []byte
 	var err error
 
 	// Check if custom rules path is provided via argv
 	// argv[0] is the program name, argv[1] would be the custom rules path
-	if len(os.Args) > 1 {
+	//
+	// Anything starting with "-" is a flag rather than a path, and must be left
+	// to whoever parses flags.
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		customRulesPath := os.Args[1]
 		fmt.Fprintf(os.Stderr, "[🧂 suola]: Loading custom rules from: %s\n", customRulesPath)
 		rulesData = mustReadConfig(customRulesPath)
@@ -213,3 +268,7 @@ func main() {
 	}
 	fmt.Fprintln(os.Stderr, "[🧂 suola]: Ready.")
 }
+
+// main exists only to satisfy package main. The module is a library: stock Go
+// runs this and exits, leaving the exports callable; TinyGo never calls it.
+func main() {}

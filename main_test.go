@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -420,6 +421,11 @@ sites:
 						t.Errorf("Concurrent reader failed: got %s, err %v", res, err)
 						return
 					}
+					// This loop never blocks, so on a cooperative scheduler --
+					// TinyGo on single-threaded wasm -- the first reader would
+					// spin forever and nothing else would ever run. Yielding
+					// costs nothing natively and lets the test run on both.
+					runtime.Gosched()
 				}
 			}
 		}()
@@ -448,5 +454,3 @@ sites:
 	close(stopChan)
 	wg.Wait()
 }
-
-

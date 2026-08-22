@@ -41,7 +41,7 @@ sites:
   - Specific domains receive auto-weight `100 + len(domain)` (longer, more specific domain names naturally take precedence).
 - `pattern`: Regex with named groups `(?P<Name>...)` for path extraction
 - `query_params`: Map field names to query parameter names
-- `template`: Go template with `{{ .Field }}` placeholders.
+- `template`: Output URL with `{{ .Field }}` placeholders — see [Template syntax](#template-syntax)
 - `transform`: Apply `lowercase` to extracted fields
 
 **Implicit Template Fields:**
@@ -63,11 +63,28 @@ sites:
           Section: "lowercase"
 ```
 
+### Template syntax
+
+`template` supports one construct: the field placeholder `{{ .Field }}`. Whitespace inside the braces
+is ignored, so `{{.Field}}` is equivalent. Field names may contain letters, digits and underscores and
+may not start with a digit; they come from the regex named groups, `query_params`, or the implicit
+fields above.
+
+Despite the syntax, these are not Go templates. Conditionals, ranges, pipelines, function calls,
+variables, comments, trim markers (`{{- .Field }}`) and nested fields (`{{ .Field.Sub }}`) are all
+unsupported, as is an unterminated `{{`. These are rejected when the rules are loaded rather than when
+a URL matches, so a bad template fails visibly instead of silently signing a wrong URL.
+
+A field with no value renders as the empty string, so `https://x/{{ .Missing }}/y` gives `https://x//y`.
+Values are written verbatim: nothing is URL-encoded or escaped, so constrain a field in `pattern` if it
+may contain characters that need encoding.
+
 **Processing:** URL normalization → domain matching → regex extraction → field transformation → template rendering → SHA-256 hashing
 
 ## Prerequisites
 
-- Go 1.26 or later
+- Go 1.26 or later, for development and tests
+- TinyGo 0.41 or later, which builds the Wasm modules
 - `make` utility
 - A WASI runtime (e.g., Wasmtime) for testing WASI modules
 
@@ -79,6 +96,7 @@ To build the modules, run the following command:
 make build
 ```
 
+The Wasm modules are built with TinyGo; stock Go is used only for development and `make test`.
 This will generate the following files in the `build/` directory:
 
 - `js.wasm`: WebAssembly module for browser environments.
@@ -100,16 +118,30 @@ The WASI module (`wasi.wasm`) can be used in WASI-compatible runtimes, such as [
 
 The WASI module exports the following functions for host integration:
 
-- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. Memory is managed by a slab allocator. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
+- `_initialize()`: Initializes the module. Must be called once, before any other export.
+- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. The buffer is kept alive by the module's memory arena until you `Free` it. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
 - `Free(ptr uint32)`: Frees a buffer previously allocated with `Malloc`. Only call this for your own input buffers, not for result pointers.
 - `GetSignature(urlPtr uint32, urlLen uint32) uint64`: Processes a URL string at the given pointer and length. Returns __a packed `uint64`__:
   - High 32 bits: pointer to the result string (signature or error message)
   - Low 32 bits: length of the result string
   - Bit 31 of the low 32 bits: error flag (1 = error, 0 = success)
 
+**Initialization:**
+
+The rules are loaded during module initialization, so the host must initialize the module before
+calling any other export. A custom rules path may be passed as `argv[1]`.
+
+`wasi.wasm` is built with TinyGo as a shared library (`-buildmode=c-shared`), making it a reactor
+module: call `_initialize`, which returns normally.
+
+If you build the module with stock Go instead, you get a command that exports `_start` rather than
+`_initialize`. Hosts that want to accept either should call whichever the module exports, preferring
+`_initialize` — a module exporting it is a library and must not be started as a command. The bundled
+Python interface does this.
+
 **Memory Management:**
 - Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use.
-- Do **not** free the result pointer from `GetSignature` — it is managed by the slab allocator.
+- Do **not** free the result pointer from `GetSignature` — it is kept alive by the module's memory arena.
 
 **Error Handling:**
 - If the error bit (bit 31) in the returned length is set, the result pointer points to an error message string.
@@ -139,11 +171,11 @@ signature = runtime_custom.get_signature("https://example.com/article")
 You can test the module directly using the Go CLI:
 
 ```sh
-go run lib.go cli.go -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
+go run . -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
 ```
 
 ## License
 
 Suola is licensed under the EUPL-1.2. See the [LICENSE](LICENSE) file for details.
 
-This project includes 'wasm_exec.js' from the Go project, licensed under the [BSD 3-Clause License](https://github.com/golang/go/blob/master/LICENSE).
+This project includes 'wasm_exec.js' from the TinyGo project, licensed under the [BSD 3-Clause License](https://github.com/tinygo-org/tinygo/blob/release/LICENSE). TinyGo's copy derives from the file of the same name in the [Go project](https://github.com/golang/go/blob/master/LICENSE), under the same license.

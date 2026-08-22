@@ -7,8 +7,11 @@ from typing import Optional, cast
 import wasmtime
 from .util import get_data_dir
 
-# Prevent excessively large URLs
+# Mirrors the limits enforced by the WASM module (see wasi.go and lib.go).
+# Checking them here turns an oversized input into a clear Python error instead
+# of a round trip that comes back as a packed error string.
 MAX_URL_LENGTH = 64 * 1024
+MAX_RULES_SIZE = 2 * 1024 * 1024
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +99,24 @@ class WasmRuntime:
         self.free_fn = cast(wasmtime.Func, exports["Free"])
         self.memory = cast(wasmtime.Memory, exports["memory"])
 
-        # Run main or _start function if present
-        if "_start" in exports:
+        # The module must be initialized before any other export is called; that
+        # is where the rules are loaded (and where argv[1] is read, if a custom
+        # rules path was set above). Which entry point exists depends on the
+        # toolchain that built the module:
+        #
+        #   _initialize -- a reactor module, i.e. a shared library. TinyGo
+        #                  builds this with -buildmode=c-shared. It runs the Go
+        #                  init functions and returns normally; main is never
+        #                  called.
+        #   _start      -- a command. Stock Go builds this by default. It runs
+        #                  init and then main, and may exit when main returns.
+        #
+        # Prefer _initialize: a module exporting it is a library and must not be
+        # started as a command.
+        if "_initialize" in exports:
+            cast(wasmtime.Func, exports["_initialize"])(self.store)
+            logger.debug("WASM module initialized via _initialize")
+        elif "_start" in exports:
             start_fn = cast(wasmtime.Func, exports["_start"])
             try:
                 start_fn(self.store)
@@ -107,6 +126,37 @@ class WasmRuntime:
                     logger.error("WASM _start function trapped: %s", e)
                 else:
                     logger.debug("WASM _start function completed with exit code %d", e.code)
+        else:
+            # Without an entry point the rules are never loaded, and every
+            # GetSignature call would fail with "rules not loaded".
+            raise RuntimeError(
+                "WASM module exports neither _initialize nor _start; cannot initialize rules"
+            )
+
+    def _unpack_result(self, result: int) -> tuple[bool, str]:
+        """Decode an export's packed uint64 return value.
+
+        Layout is [pointer:32][length:31|error_bit:1], as documented in wasi.go.
+        Returns (is_error, message); the message is the signature on success and
+        the error text otherwise.
+
+        The memory base is read *after* the call rather than reused from before
+        it: an export can grow linear memory, which invalidates any host pointer
+        taken earlier.
+        """
+        ptr = (result >> 32) & 0xFFFFFFFF
+        length = result & 0x7FFFFFFF  # Mask out error bit
+        is_error = (result & 0x80000000) != 0
+
+        if ptr == 0 or length == 0:
+            return is_error, ""
+
+        memory_size = self.memory.data_len(self.store)
+        if ptr + length > memory_size:
+            raise RuntimeError(f"Result overflow: ptr={ptr}, len={length}, memory_size={memory_size}")
+
+        memory_data = self.memory.data_ptr(self.store)
+        return is_error, bytes(memory_data[ptr:ptr + length]).decode('utf-8')
 
     def get_signature(self, url: str) -> str:
         """Call GetSignature function directly in WASM."""
@@ -139,22 +189,10 @@ class WasmRuntime:
             # Call GetSignature
             result = self.get_signature_fn(self.store, url_ptr, url_len)
             
-            # Unpack result: high 32 bits = pointer, low 32 bits = length
-            sig_ptr = (result >> 32) & 0xFFFFFFFF
-            sig_len = result & 0x7FFFFFFF  # Mask out error bit
-            is_error = (result & 0x80000000) != 0
-
-            # Validate result bounds before reading
-            if sig_ptr != 0 and sig_len > 0:
-                if sig_ptr + sig_len > memory_size:
-                    raise RuntimeError(f"Result overflow: ptr={sig_ptr}, len={sig_len}, memory_size={memory_size}")
-            
-            # Read result from WASM memory using bytes() constructor directly on slice
-            result_str = bytes(memory_data[sig_ptr:sig_ptr + sig_len]).decode('utf-8')
-            
+            is_error, result_str = self._unpack_result(result)
             if is_error:
                 raise RuntimeError(f"WASM error: {result_str}")
-            
+
             return result_str
         finally:
             # Free only the input buffer allocated by Malloc
@@ -195,6 +233,9 @@ class WasmRuntime:
         if rules_len == 0:
             raise ValueError("Rules data cannot be empty")
 
+        if rules_len > MAX_RULES_SIZE:
+            raise ValueError(f"Rules too large: {rules_len} bytes (max {MAX_RULES_SIZE})")
+
         rules_ptr = self.malloc_fn(self.store, rules_len)
         if rules_ptr == 0:
             raise RuntimeError("Failed to allocate memory in WASM")
@@ -207,17 +248,9 @@ class WasmRuntime:
 
             result = self.append_rules_fn(self.store, rules_ptr, rules_len)
 
-            sig_ptr = (result >> 32) & 0xFFFFFFFF
-            sig_len = result & 0x7FFFFFFF
-            is_error = (result & 0x80000000) != 0
-
+            is_error, err_msg = self._unpack_result(result)
             if is_error:
-                memory_size = self.memory.data_len(self.store)
-                if sig_ptr != 0 and sig_len > 0 and sig_ptr + sig_len <= memory_size:
-                    err_msg = bytes(memory_data[sig_ptr:sig_ptr + sig_len]).decode('utf-8')
-                else:
-                    err_msg = "Unknown WASM error"
-                raise RuntimeError(f"Failed to append rules: {err_msg}")
+                raise RuntimeError(f"Failed to append rules: {err_msg or 'Unknown WASM error'}")
         finally:
             self.free_fn(self.store, rules_ptr)
 

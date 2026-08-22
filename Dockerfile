@@ -1,18 +1,66 @@
 # NOTICE: When updating base images, make sure they use the same base image (i.e. debian bookworm)
 ARG GO_VERSION=1.26
 
+# TinyGo, used to build the smaller Wasm modules.
+ARG TINYGO_VERSION=0.41.1
+
+# WASI runtime, used to run the wasip1 test binary (make test-wasi).
+ARG WASMTIME_VERSION=48.0.0
+
 # Python interface
 ARG UV_VERSION=0.5.20
 ARG UV_PROJECT_ENVIRONMENT=/app/python/.venv/
 ARG PYTHON_VERSION=3.11
 
+FROM ghcr.io/tinygo-org/tinygo:${TINYGO_VERSION} AS tinygo
+
+
+##
+## WASI runtime stage
+## ==================
+## Source for the wasmtime binary; wasmtime publishes no image. Needed by
+## `tinygo test -target=wasip1`, whose target spec invokes `wasmtime run`.
+##
+## The binary is dynamically linked but requires no more than GLIBC_2.28, which
+## both bookworm (2.36) and trixie (2.41) satisfy, so the stage base does not
+## have to match the stages that COPY it.
+FROM debian:bookworm-slim AS wasmtime
+
+ARG WASMTIME_VERSION
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        # The release tarball is xz-compressed
+        xz-utils
+
+# uname -m already spells the architecture the way the release assets do
+# (x86_64 / aarch64), so no mapping is needed.
+RUN ARCH="$(uname -m)"; \
+    RELEASE="wasmtime-v${WASMTIME_VERSION}-${ARCH}-linux"; \
+    curl -fsSL -o /tmp/wasmtime.tar.xz \
+        "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/${RELEASE}.tar.xz" && \
+    tar -xJf /tmp/wasmtime.tar.xz -C /tmp && \
+    mv "/tmp/${RELEASE}/wasmtime" /usr/local/bin/wasmtime && \
+    rm -rf /tmp/wasmtime.tar.xz "/tmp/${RELEASE}" && \
+    wasmtime --version
+
+
 ##
 ## Builder stage
 ## =============
-FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS wasm-builder
+FROM golang:${GO_VERSION} AS wasm-builder
 
 # Create and change to the app directory.
 WORKDIR /app
+
+# TinyGo drives the Go toolchain already present in this image.
+COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
+RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
+    tinygo version
 
 RUN --mount=type=bind,source=go.mod,target=go.mod \
     --mount=type=bind,source=go.sum,target=go.sum \
@@ -34,7 +82,16 @@ CMD ["/bin/bash", "-c", "make build-wasm"]
 ## ==========
 FROM wasm-builder AS test
 
-CMD ["/bin/bash", "-c", "make test"]
+# Node loads build/js.wasm for the browser-module smoke tests (make test-js).
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs
+
+# Runs the wasip1 test binary for `make test-wasi`.
+COPY --from=wasmtime /usr/local/bin/wasmtime /usr/local/bin/wasmtime
+
+CMD ["/bin/bash", "-c", "make test test-wasi test-js"]
 
 
 ## Python stage
@@ -128,7 +185,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         python${PYTHON_VERSION} \
-        wabt
+        wabt \
+        # Loads build/js.wasm for `make test-js`
+        nodejs \
+        # Bookworm support file for TinyGo
+        libstdc++6
+
+COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
+RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
+    tinygo version
+
+# Runs the wasip1 test binary for `make test-wasi`, so every make test* target
+# works in the devcontainer, not just in CI.
+COPY --from=wasmtime /usr/local/bin/wasmtime /usr/local/bin/wasmtime
+RUN wasmtime --version
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 RUN echo 'eval "$(uv generate-shell-completion bash)"' >> /etc/bash.bashrc
