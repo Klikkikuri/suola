@@ -1,18 +1,29 @@
 # NOTICE: When updating base images, make sure they use the same base image (i.e. debian bookworm)
 ARG GO_VERSION=1.26
 
+# TinyGo, used to build the smaller Wasm modules.
+ARG TINYGO_VERSION=0.41.1
+
 # Python interface
 ARG UV_VERSION=0.5.20
 ARG UV_PROJECT_ENVIRONMENT=/app/python/.venv/
 ARG PYTHON_VERSION=3.11
 
+FROM ghcr.io/tinygo-org/tinygo:${TINYGO_VERSION} AS tinygo
+
+
 ##
 ## Builder stage
 ## =============
-FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS wasm-builder
+FROM golang:${GO_VERSION} AS wasm-builder
 
 # Create and change to the app directory.
 WORKDIR /app
+
+# TinyGo drives the Go toolchain already present in this image.
+COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
+RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
+    tinygo version
 
 RUN --mount=type=bind,source=go.mod,target=go.mod \
     --mount=type=bind,source=go.sum,target=go.sum \
@@ -128,7 +139,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         python${PYTHON_VERSION} \
-        wabt
+        wabt \
+        # Bookworm support file for TinyGo
+        libstdc++6
+
+COPY --from=tinygo /usr/local/tinygo /usr/local/tinygo
+RUN ln -s ../tinygo/bin/tinygo /usr/local/bin/tinygo && \
+    tinygo version
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 RUN echo 'eval "$(uv generate-shell-completion bash)"' >> /etc/bash.bashrc
