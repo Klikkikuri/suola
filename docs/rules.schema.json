@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Klikkikuri/suola/main/docs/rules.schema.json",
+  "title": "Suola URL normalization rules",
+  "description": "Schema for rules.yaml, the authored source, and for the build/rules.json it is compiled into. Also validates rule sets passed at runtime to AppendRules or as a custom rules file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sites"],
+  "properties": {
+    "$schema": {
+      "description": "Optional schema reference. Emitted by rules-compile and ignored by the module.",
+      "type": "string"
+    },
+    "sites": {
+      "description": "Site rules, evaluated in descending order of effective weight.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/site" }
+    }
+  },
+  "$defs": {
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain"],
+      "properties": {
+        "domain": {
+          "description": "Domain this rule applies to, e.g. \"example.com\". An empty string is the wildcard rule matching any domain.",
+          "type": "string"
+        },
+        "weight": {
+          "description": "Explicit priority weight. When omitted, the wildcard domain gets 0 and other domains get 100 + len(domain).",
+          "type": "integer"
+        },
+        "templates": {
+          "description": "Extraction templates, tried in order until one matches.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/template" }
+        },
+        "tests": {
+          "description": "Test cases for this site. Stripped from the embedded build/rules.json; see build/rules.tests.json.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/test" }
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template"],
+      "properties": {
+        "pattern": {
+          "description": "Regex with named groups (?P<Name>...) matched against the URL path. Omit to match any path.",
+          "type": "string",
+          "maxLength": 4096
+        },
+        "query_params": {
+          "description": "Template field name -> query parameter name to read it from.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "template": {
+          "description": "Output URL with {{ .Field }} placeholders.",
+          "type": "string",
+          "minLength": 1
+        },
+        "transform": {
+          "description": "Field name -> transformation to apply to the extracted value.",
+          "type": "object",
+          "additionalProperties": { "enum": ["lowercase"] }
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "description": "Input URL.", "type": "string" },
+        "expected": { "description": "Expected normalized URL.", "type": "string" },
+        "signature": {
+          "description": "Expected SHA-256 signature of the normalized URL.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sign": {
+          "description": "Deprecated alias for \"signature\". Normalized to \"signature\" by rules-compile.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "xfail": {
+          "description": "The URL is expected to have no matching rule.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

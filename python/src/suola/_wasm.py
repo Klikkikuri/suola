@@ -201,13 +201,16 @@ class WasmRuntime:
 
     def append_rules(self, rules: str | bytes | Path) -> None:
         """
-        Append additional YAML rules to the runtime at runtime.
+        Append additional JSON rules to the runtime at runtime.
+
+        Rules are authored as YAML in the repository but the module parses JSON only; compile
+        them with ``make rules`` (see ``cmd/rules-compile``) before passing them here.
 
         Note on string resolution:
-        If a `str` is passed, it is treated as literal YAML content if it contains newlines or
-        starts with 'sites:'. Otherwise, if it corresponds to an existing file path on disk,
-        it will be read from that file. To guarantee that a file path is never misinterpreted as
-        literal YAML, pass a `pathlib.Path` instance.
+        If a `str` is passed, it is treated as literal JSON content if it starts with '{'.
+        Otherwise, if it corresponds to an existing file path on disk, it will be read from that
+        file. To guarantee that a file path is never misinterpreted as literal JSON, pass a
+        `pathlib.Path` instance.
         """
         if self.append_rules_fn is None:
             raise RuntimeError("AppendRules export not available in WASM module")
@@ -215,8 +218,7 @@ class WasmRuntime:
         if isinstance(rules, Path):
             rules_bytes = rules.read_bytes()
         elif isinstance(rules, str):
-            s = rules.strip()
-            if "\n" in rules or s.startswith("sites:"):
+            if rules.lstrip().startswith("{"):
                 rules_bytes = rules.encode('utf-8')
             else:
                 p = Path(rules)
