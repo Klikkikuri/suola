@@ -48,6 +48,7 @@ ARG UV_VERSION \
 
 ENV UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT} \
     UV_PYTHON_VERSION=${PYTHON_VERSION} \
+    UV_CACHE_DIR=/tmp/.uv-cache \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1
 
@@ -68,7 +69,7 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 RUN mkdir -p "${UV_PROJECT_ENVIRONMENT}"
 # WORKDIR /app/python
 
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/tmp/.uv-cache \
     --mount=type=bind,source=python/uv.lock,target=python/uv.lock \
     --mount=type=bind,source=python/pyproject.toml,target=python/pyproject.toml \
     uv venv \
@@ -96,7 +97,7 @@ ENV UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT} \
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/tmp/.uv-cache \
     uv sync \
         --directory /app/python \
         --group test
@@ -113,7 +114,8 @@ ARG UV_VERSION \
     PYTHON_VERSION
 
 # /app folder is mounted as a volume
-ENV UV_LINK_MODE=copy
+ENV UV_LINK_MODE=copy \
+    UV_CACHE_DIR=/tmp/.uv-cache
 
 # Create and change to the app directory.
 WORKDIR /app
@@ -137,7 +139,7 @@ COPY --from=python-builder --chown=vscode:vscode  "${UV_PROJECT_ENVIRONMENT}" "$
 
 USER vscode
 
-RUN  --mount=type=cache,target=/root/.cache/uv \
+RUN  --mount=type=cache,target=/tmp/.uv-cache,uid=1000,gid=1000 \
     uv sync \
         --verbose \
         --directory /app/python \
