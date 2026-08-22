@@ -44,6 +44,18 @@ Referencing the schema from the top of `rules.yaml` gives editor validation whil
 # yaml-language-server: $schema=./docs/rules.schema.json
 ```
 
+### Publishing rules
+
+Merges into `main` that touch `rules.yaml`, the schema, or `cmd/rules-compile` run
+[`.github/workflows/rules.yml`](.github/workflows/rules.yml): the rules are compiled, verified
+against their own test cases, and the resulting `rules.json` is committed to the
+[rahti](https://github.com/Klikkikuri/rahti) data repository, which consumes them at runtime.
+The published copy references the schema by its canonical URL rather than the relative path used
+in `build/`, and an unchanged rule set is a no-op rather than an empty commit.
+
+Publishing needs a GitHub App installed on `rahti` with `Contents: read and write`, exposed to
+this repository as the `CLIENT_ID` and `CLIENT_PRIVATE_KEY` secrets.
+
 Anything that takes rules at runtime — the CLI's `-config` flag, the WASI module's `argv[1]`, and
 `AppendRules` from Python and JavaScript — takes this compiled JSON, not YAML. Convert a YAML rule
 set with `go run ./cmd/rules-compile -o rules.json <file>`, or with `yq -o=json`.
