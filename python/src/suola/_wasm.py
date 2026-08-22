@@ -96,8 +96,24 @@ class WasmRuntime:
         self.free_fn = cast(wasmtime.Func, exports["Free"])
         self.memory = cast(wasmtime.Memory, exports["memory"])
 
-        # Run main or _start function if present
-        if "_start" in exports:
+        # The module must be initialized before any other export is called; that
+        # is where the rules are loaded (and where argv[1] is read, if a custom
+        # rules path was set above). Which entry point exists depends on the
+        # toolchain that built the module:
+        #
+        #   _initialize -- a reactor module, i.e. a shared library. TinyGo
+        #                  builds this with -buildmode=c-shared. It runs the Go
+        #                  init functions and returns normally; main is never
+        #                  called.
+        #   _start      -- a command. Stock Go builds this by default. It runs
+        #                  init and then main, and may exit when main returns.
+        #
+        # Prefer _initialize: a module exporting it is a library and must not be
+        # started as a command.
+        if "_initialize" in exports:
+            cast(wasmtime.Func, exports["_initialize"])(self.store)
+            logger.debug("WASM module initialized via _initialize")
+        elif "_start" in exports:
             start_fn = cast(wasmtime.Func, exports["_start"])
             try:
                 start_fn(self.store)
@@ -107,6 +123,12 @@ class WasmRuntime:
                     logger.error("WASM _start function trapped: %s", e)
                 else:
                     logger.debug("WASM _start function completed with exit code %d", e.code)
+        else:
+            # Without an entry point the rules are never loaded, and every
+            # GetSignature call would fail with "rules not loaded".
+            raise RuntimeError(
+                "WASM module exports neither _initialize nor _start; cannot initialize rules"
+            )
 
     def get_signature(self, url: str) -> str:
         """Call GetSignature function directly in WASM."""

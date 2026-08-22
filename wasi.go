@@ -7,8 +7,16 @@
 // It uses a memory arena pattern to prevent garbage collection of allocations
 // that are accessed from the host (Python/JavaScript).
 //
+// Initialization: the module must be initialized before any export is called,
+// and how depends on which toolchain built it. A stock Go build is a command
+// and exports _start; a TinyGo build is a shared library (buildmode=c-shared)
+// and exports _initialize instead. Hosts should call whichever is present.
+// Either way, rules are loaded by then (see init below), and a custom rules
+// path may be passed as argv[1].
+//
 // Usage from Python (wasmtime-py):
 //
+//  0. Call _initialize (TinyGo build) or _start (stock Go build)
 //  1. Call Malloc(size) to allocate a buffer for input
 //  2. Write your data to the returned pointer
 //  3. Call GetSignature(ptr, len) to process the URL
@@ -191,7 +199,19 @@ func Free(ptr uint32) {
 	memoryArena.Delete(ptr)
 }
 
-func main() {
+// Rules are loaded during initialization rather than from main, so that the
+// module works in both shapes it is built as:
+//
+//   - Stock Go (buildmode=default) links a command that the host starts via
+//     _start, which runs init then main.
+//   - TinyGo builds this as a shared library (buildmode=c-shared), a reactor
+//     module: the host calls _initialize, main is never run, and TinyGo panics
+//     in runtime.wasmExportCheckRun if a //go:wasmexport is called after main
+//     would have returned.
+//
+// init covers both: it is the only hook that runs before the exports become
+// callable under either shape.
+func init() {
 	var rulesData []byte
 	var err error
 
@@ -213,3 +233,7 @@ func main() {
 	}
 	fmt.Fprintln(os.Stderr, "[🧂 suola]: Ready.")
 }
+
+// main exists only to satisfy package main. The module is a library: stock Go
+// runs this and exits, leaving the exports callable; TinyGo never calls it.
+func main() {}
