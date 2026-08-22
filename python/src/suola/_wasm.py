@@ -201,7 +201,7 @@ class WasmRuntime:
 
     def append_rules(self, rules: str | bytes | Path) -> None:
         """
-        Append additional JSON rules to the runtime at runtime.
+        Append additional JSON rules to the already-initialized runtime.
 
         Rules are authored as YAML in the repository but the module parses JSON only; compile
         them with ``make rules`` (see ``cmd/rules-compile``) before passing them here.
