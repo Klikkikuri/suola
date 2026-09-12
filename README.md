@@ -192,8 +192,13 @@ exporting it is a library and must not be started as a command. The bundled Pyth
 this.
 
 **Memory Management:**
-- Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use.
-- Do **not** free the result pointer from `GetSignature` — it is kept alive by the module's memory arena.
+- Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use. An input
+  pointer must be one `Malloc` returned; the module rejects any other pointer.
+- Do **not** free the result pointer from `GetSignature` — the module owns it.
+- **Read a result before you make more calls.** The module owns result allocations, so it retires them
+  itself: the most recent few stay valid and older ones are released, which keeps memory flat however many
+  URLs you sign. Copy the bytes out as soon as the call returns, the way the bundled Python interface does.
+  Keeping a result pointer and reading it much later reads released memory.
 
 **Error Handling:**
 - If the error bit (bit 31) in the returned length is set, the result pointer points to an error message string.

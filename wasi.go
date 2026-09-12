@@ -23,13 +23,15 @@
 //  3. Call GetSignature(ptr, len) to process the URL
 //  4. Read the result from the returned pointer (high 32 bits) and length (low 32 bits)
 //  5. Call Free(ptr) on the input buffer when done
-//  6. Note: Do NOT call Free() on the result pointer - it's managed by Go's memory arena
+//  6. Note: Do NOT call Free() on the result pointer - the module owns it and retires it later.
+//     Read the result before the next call into the module; it is not kept alive indefinitely.
 //
 // Memory Management:
 //   - Malloc/Free: Used by host to manage input buffers
 //   - stringToPtr: Used internally to return results, stores in memoryArena
 //   - memoryArena: Prevents GC of allocations until explicitly freed
-//   - Result pointers from GetSignature are NOT freed by the host
+//   - Result pointers from GetSignature are NOT freed by the host; the module retires the oldest
+//     once maxLiveResults newer results exist, so the arena does not grow with the call count
 //
 // Example Python code:
 //
@@ -78,6 +80,32 @@ const maxAllocSize = MaxRulesSize
 // Memory arena to prevent garbage collection of allocations
 // Using a sync.Map for better concurrent performance
 var memoryArena sync.Map // map[uint32][]byte
+
+// Results are allocated by the module, not by the host, so the host never frees them and the module must
+// retire them itself. A host reads a result before it calls the module again -- that is the documented
+// sequence -- so only the most recent results have to stay alive. Keeping a few gives margin for a host
+// that collects several results before it reads them, and keeps the arena flat instead of growing once
+// per call.
+const maxLiveResults = 8
+
+var (
+	liveResults   [maxLiveResults]uint32
+	liveResultPos int
+	liveResultsMu sync.Mutex
+)
+
+// retainResult keeps ptr alive and frees the result it displaces. The displaced result is still in the
+// arena when the new one is allocated, so the two can never share an address.
+func retainResult(ptr uint32) {
+	liveResultsMu.Lock()
+	defer liveResultsMu.Unlock()
+
+	if old := liveResults[liveResultPos]; old != 0 && old != ptr {
+		memoryArena.Delete(old)
+	}
+	liveResults[liveResultPos] = ptr
+	liveResultPos = (liveResultPos + 1) % maxLiveResults
+}
 
 // GetSignature processes a URL and returns a signature.
 //
@@ -184,8 +212,8 @@ func ptrToString(ptr, length uint32) (string, error) {
 	return string(buf), nil
 }
 
-// Helper to allocate string in WASM memory and return pointer + length
-// Keeps the allocation alive by storing it in memoryArena
+// Helper to allocate string in WASM memory and return pointer + length.
+// Keeps the allocation alive by storing it in memoryArena, until retainResult retires it.
 func stringToPtr(s string) (uint32, uint32) {
 	if len(s) == 0 {
 		return 0, 0
@@ -203,6 +231,7 @@ func stringToPtr(s string) (uint32, uint32) {
 
 	// Store in memory arena to prevent GC
 	memoryArena.Store(ptr, bytes)
+	retainResult(ptr)
 
 	return ptr, uint32(len(bytes))
 }
