@@ -18,6 +18,16 @@ Signatures are generated using SHA-256 hashing. The input URL is normalized acco
 defined in `rules.yaml`, and then the hash is computed. This ensures that the same URL will always
 produce the same signature, regardless of its original format.
 
+**The wildcard rule.** `rules.yaml` ends with a `domain: ""` rule, so every host gets a signature. It
+keeps the host and the path, drops the query and trims trailing slashes: tracking parameters are the
+common case and must not split an article, and an article told apart only by its query is the rare case
+that needs a named rule of its own. A host with a named rule is unaffected — the wildcard rule has
+weight `0`, so every named rule is evaluated first, and the wildcard rule only catches what falls
+through.
+
+An input with no host is rejected rather than signed, and a bare host signs as its root. See
+[URLs that the module refuses](docs/api.md#urls-that-the-module-refuses).
+
 ### Authoring and compiling rules
 
 The module parses **JSON only** — a YAML parser costs size and reflection the TinyGo builds should
@@ -88,6 +98,12 @@ sites:
 - `query_params`: Map field names to query parameter names
 - `template`: Output URL with `{{ .Field }}` placeholders — see [Template syntax](#template-syntax)
 - `transform`: Apply `lowercase` to extracted fields
+- `tests`: Test cases for the rule, read by the Go and Python suites:
+  - `url`: The input URL.
+  - `expected`: The normalized URL the rule must produce.
+  - `signature`: The SHA-256 hash of `expected`. `sign` is a deprecated alias.
+  - `xfail`: No named rule matches the URL; the wildcard rule resolves it. It marks a URL that is not an
+    article, such as a listing page, and fails if a named rule starts matching it.
 
 **Implicit Template Fields:**
 All templates are pre-seeded with default fields extracted from the normalized URL:
@@ -147,7 +163,7 @@ This will generate the following files in the `build/` directory:
 - `js.wasm`: WebAssembly module for browser environments.
 - `wasi.wasm`: WebAssembly module for WASI environments.
 - `rules.json`: the compiled rules embedded in both modules, plus `rules.tests.json` alongside it.
-- `suola.js`: go javascript support file from go distribution.
+- `wasm_exec.js`: JavaScript support file, copied from the toolchain that built `js.wasm`.
 - `suola-*.whl`: Python wheels package, containing python support files and `wasi.wasm`.
 
 When TinyGo is not installed, `js`, `wasi` and `test-wasi` fall back to stock Go, so the tree stays
@@ -158,78 +174,18 @@ that has TinyGo and pins `TINYGO=tinygo`, so a missing TinyGo fails the build th
 
 ## Usage
 
-### Browser Environment
+[`docs/api.md`](docs/api.md) documents the API of each build: the browser module, the WASI module, the
+Python interface, and the native command.
 
-Include the `js.wasm` file in your web application. Refer to the `build/suola.js` file for integration examples.
-
-### WASI Environment
-
-The WASI module (`wasi.wasm`) can be used in WASI-compatible runtimes, such as [Wasmtime](https://wasmtime.dev/), or embedded in other languages (e.g., Python, Rust) that support WASI.
-
-#### WASI API
-
-The WASI module exports the following functions for host integration:
-
-- `_initialize()`: Initializes the module. Must be called once, before any other export.
-- `Malloc(size uint32) uint32`: Allocates a buffer of `size` bytes in WASM memory. Returns a pointer to the buffer. The buffer is kept alive by the module's memory arena until you `Free` it. Size is limited in `wasi.go`, but should be sufficient for typical URL inputs.
-- `Free(ptr uint32)`: Frees a buffer previously allocated with `Malloc`. Only call this for your own input buffers, not for result pointers.
-- `GetSignature(urlPtr uint32, urlLen uint32) uint64`: Processes a URL string at the given pointer and length. Returns __a packed `uint64`__:
-  - High 32 bits: pointer to the result string (signature or error message)
-  - Low 32 bits: length of the result string
-  - Bit 31 of the low 32 bits: error flag (1 = error, 0 = success)
-
-**Initialization:**
-
-The rules are loaded during module initialization, so the host must initialize the module before
-calling any other export. A path to a compiled JSON rule set may be passed as `argv[1]`.
-
-`wasi.wasm` is built as a shared library (`-buildmode=c-shared`) under either toolchain, making it a
-reactor module: call `_initialize`, which returns normally.
-
-A module built as a plain command exports `_start` rather than `_initialize`. Hosts that want to
-accept either should call whichever the module exports, preferring `_initialize` — a module
-exporting it is a library and must not be started as a command. The bundled Python interface does
-this.
-
-**Memory Management:**
-- Allocate input buffers with `Malloc`, write your data, and free them with `Free` after use. An input
-  pointer must be one `Malloc` returned; the module rejects any other pointer.
-- Do **not** free the result pointer from `GetSignature` — the module owns it.
-- **Read a result before you make more calls.** The module owns result allocations, so it retires them
-  itself: the most recent few stay valid and older ones are released, which keeps memory flat however many
-  URLs you sign. Copy the bytes out as soon as the call returns, the way the bundled Python interface does.
-  Keeping a result pointer and reading it much later reads released memory.
-
-**Error Handling:**
-- If the error bit (bit 31) in the returned length is set, the result pointer points to an error message string.
-- Otherwise, the result pointer points to the signature string (64 hex characters).
-
-### Python Usage
-
-The Python interface supports loading custom rules at runtime:
-
-```python
-from suola._wasm import WasmRuntime
-from pathlib import Path
-
-# Use default embedded rules
-runtime = WasmRuntime()
-signature = runtime.get_signature("https://example.com/article")
-
-# Use custom rules file
-runtime_custom = WasmRuntime(custom_rules_path=Path("/path/to/custom_rules.json"))
-signature = runtime_custom.get_signature("https://example.com/article")
+```js
+// Browser: sign against the base rules, or against a rule set kept under a name.
+hashUrl("https://example.fi/article");
+defineRules("owner:example.fi", ownerRules);
+hashUrl("https://example.fi/article", "owner:example.fi");
 ```
 
-**Note:** The custom rules file is compiled JSON, not YAML — see
-[Authoring and compiling rules](#authoring-and-compiling-rules). It must be accessible to the WASI
-module; the Python interface automatically handles directory preopening for file access.
-
-### CLI Example / native Go
-
-You can test the module directly using the Go CLI:
-
 ```sh
+# Native command
 go run . -url=https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880 -sign
 ```
 

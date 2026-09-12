@@ -88,7 +88,7 @@
           "pattern": "^[0-9a-f]{64}$"
         },
         "xfail": {
-          "description": "The URL is expected to have no matching rule.",
+          "description": "No named rule matches the URL; the wildcard rule resolves it. Marks a URL that is not an article, such as a listing page.",
           "type": "boolean"
         }
       }

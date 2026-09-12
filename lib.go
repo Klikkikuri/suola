@@ -60,8 +60,21 @@ type Config struct {
 //go:embed build/rules.json
 var DefaultCfgData []byte
 
+// A rule set stored under a name, layered over the base rules. The layer is kept as it was given, so the
+// set can be made again when the base rules change: a named set always means "this document over the base
+// rules", not "this document over the rules that were current when it was defined".
+type ruleSet struct {
+	layer    *Config
+	composed *Config
+}
+
 var (
-	rules      atomic.Pointer[Config]
+	// rules holds the base rule set, which LoadRules replaces and AppendRules grows.
+	rules atomic.Pointer[Config]
+	// namedSets holds the sets layered over the base rules, by name. Readers load it without a lock;
+	// writers replace the whole map under rulesMutex.
+	namedSets atomic.Pointer[map[string]*ruleSet]
+
 	rulesMutex sync.Mutex
 )
 
@@ -125,6 +138,9 @@ func compileSites(sites []SiteRule) error {
 	return nil
 }
 
+// sortSites puts the sites in evaluation order: weight descending, then domain, then the order the sites
+// were given in. The sort is stable, so the order of the input decides a tie: UseRules puts the owner set
+// first, AppendRules puts the new set last.
 func sortSites(sites []SiteRule) {
 	sort.SliceStable(sites, func(i, j int) bool {
 		if sites[i]._EffectiveWeight != sites[j]._EffectiveWeight {
@@ -166,6 +182,7 @@ func LoadRules(data []byte) error {
 	defer rulesMutex.Unlock()
 
 	rules.Store(cfg)
+	relayerNamedSets(cfg)
 	return nil
 }
 
@@ -189,12 +206,157 @@ func AppendRules(data []byte) error {
 
 	sortSites(merged.Sites)
 	rules.Store(merged)
+	relayerNamedSets(merged)
 	return nil
 }
 
-// Normalize URL using purell
-func normalizeURL(rawURL string) (string, error) {
-	return purell.NormalizeURLString(rawURL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagSortQuery)
+// layerOver puts the sites of layer before the sites of base and sorts them into evaluation order. The sort
+// is stable, so a layer site wins the tie against a base site with the same domain and weight, and the base
+// site stays in the set below it and catches the paths the layer templates do not match.
+func layerOver(layer, base *Config) *Config {
+	composed := &Config{Sites: make([]SiteRule, 0, len(layer.Sites)+len(base.Sites))}
+	composed.Sites = append(composed.Sites, layer.Sites...)
+	composed.Sites = append(composed.Sites, base.Sites...)
+
+	sortSites(composed.Sites)
+	return composed
+}
+
+// DefineRules stores a rule set under a name, layered over the base rules. Defining a name again replaces
+// it. The change is atomic: a rule set that does not compile is reported and nothing changes.
+func DefineRules(name string, data []byte) error {
+	if name == "" {
+		return fmt.Errorf("rule set name is required")
+	}
+
+	layer, err := parseAndCompile(data)
+	if err != nil {
+		return err
+	}
+
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	base := rules.Load()
+	if base == nil {
+		return fmt.Errorf("rules not loaded")
+	}
+
+	sets := cloneNamedSets()
+	sets[name] = &ruleSet{layer: layer, composed: layerOver(layer, base)}
+	namedSets.Store(&sets)
+	return nil
+}
+
+// DropRules removes a named rule set. It reports a name that is not defined, so a caller cannot believe it
+// removed something it did not.
+func DropRules(name string) error {
+	rulesMutex.Lock()
+	defer rulesMutex.Unlock()
+
+	sets := cloneNamedSets()
+	if _, found := sets[name]; !found {
+		return fmt.Errorf("unknown rule set %q", name)
+	}
+
+	delete(sets, name)
+	namedSets.Store(&sets)
+	return nil
+}
+
+// RuleSetNames returns the defined names, sorted.
+func RuleSetNames() []string {
+	sets := namedSets.Load()
+	if sets == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(*sets))
+	for name := range *sets {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
+// rulesFor returns the rule set to evaluate a URL against. An empty name is the base rules.
+func rulesFor(name string) (*Config, error) {
+	if name == "" {
+		base := rules.Load()
+		if base == nil {
+			return nil, fmt.Errorf("rules not loaded")
+		}
+		return base, nil
+	}
+
+	sets := namedSets.Load()
+	if sets != nil {
+		if set, found := (*sets)[name]; found {
+			return set.composed, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown rule set %q", name)
+}
+
+// cloneNamedSets copies the registry so a writer can change it without disturbing readers.
+// The caller must hold rulesMutex.
+func cloneNamedSets() map[string]*ruleSet {
+	current := namedSets.Load()
+	if current == nil {
+		return map[string]*ruleSet{}
+	}
+
+	clone := make(map[string]*ruleSet, len(*current))
+	for name, set := range *current {
+		clone[name] = set
+	}
+	return clone
+}
+
+// relayerNamedSets builds every named set again over base. The caller must hold rulesMutex and must call
+// this whenever the base rules change, or a named set keeps layering over rules that are no longer active.
+func relayerNamedSets(base *Config) {
+	current := namedSets.Load()
+	if current == nil || len(*current) == 0 {
+		return
+	}
+
+	relayered := make(map[string]*ruleSet, len(*current))
+	for name, set := range *current {
+		relayered[name] = &ruleSet{layer: set.layer, composed: layerOver(set.layer, base)}
+	}
+	namedSets.Store(&relayered)
+}
+
+// normalizeURL puts a URL in its canonical form.
+//
+// An input without a host is not a URL this module can sign. It is a scheme-only form (mailto:, data:,
+// about:blank) or a relative reference, and a relative reference must be resolved against its document by
+// the caller, which is the only side that knows the document. Without this test the catch-all rule signs
+// all of them, and they collide on one signature.
+//
+// A host with no path gets the path "/", so https://host and https://host/ are one URL. purell keeps a
+// trailing slash but does not add a missing one, and FlagAddTrailingSlash is not the answer: it adds a
+// slash to every path and changes every named rule.
+func normalizeURL(rawURL string) (*url.URL, error) {
+	normalized, err := purell.NormalizeURLString(rawURL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagSortQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("URL has no host: %s", rawURL)
+	}
+	if parsed.Path == "" {
+		parsed.Path = "/"
+	}
+	return parsed, nil
 }
 
 // Extract fields using regex and query parameters
@@ -250,27 +412,24 @@ func formatURL(u *url.URL, rule TemplateRule, fields map[string]string) (string,
 	return rule._Template.Render(fields), nil
 }
 
-// Process a given URL and match it with site rules
-func processURL(inputURL string) (string, error) {
-	normalizedURL, err := normalizeURL(inputURL)
+// matchURL processes a URL against the named rule set and returns the formatted URL with the site rule that
+// made it. An empty name is the base rules. The site rule tells a named rule from the catch-all, which is
+// what the rule tests use; processURL discards it.
+func matchURL(name, inputURL string) (string, *SiteRule, error) {
+	parsed, err := normalizeURL(inputURL)
 	if err != nil {
-		return "", err
-	}
-
-	parsed, err := url.Parse(normalizedURL)
-
-	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	host := parsed.Host
 
-	cfg := GetRules()
-	if cfg == nil {
-		return "", fmt.Errorf("rules not loaded")
+	cfg, err := rulesFor(name)
+	if err != nil {
+		return "", nil, err
 	}
 
-	for _, site := range cfg.Sites {
+	for i := range cfg.Sites {
+		site := &cfg.Sites[i]
 		if site.Domain == "" || host == site.Domain || strings.HasSuffix(host, "."+site.Domain) {
 			for _, rule := range site.Templates {
 				if rule._Regex == nil || rule._Regex.MatchString(parsed.Path) {
@@ -279,12 +438,19 @@ func processURL(inputURL string) (string, error) {
 						fmt.Println("Error:", err)
 						continue
 					}
-					return formatURL(parsed, rule, fields)
+					formatted, err := formatURL(parsed, rule, fields)
+					return formatted, site, err
 				}
 			}
 		}
 	}
-	return "", fmt.Errorf("no matching rule found for host %s", host)
+	return "", nil, fmt.Errorf("no matching rule found for host %s", host)
+}
+
+// Process a given URL and match it with the base rules.
+func processURL(inputURL string) (string, error) {
+	formatted, _, err := matchURL("", inputURL)
+	return formatted, err
 }
 
 // Generate SHA-256 hash of the given string
@@ -293,9 +459,14 @@ func generateSignature(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// Get signature for a given URL.
+// Get signature for a given URL, against the base rules.
 func getSignature(inputURL string) (string, error) {
-	formattedURL, err := processURL(inputURL)
+	return getSignatureIn("", inputURL)
+}
+
+// Get signature for a given URL, against a named rule set. An empty name is the base rules.
+func getSignatureIn(name, inputURL string) (string, error) {
+	formattedURL, _, err := matchURL(name, inputURL)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return "", err

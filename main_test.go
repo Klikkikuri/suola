@@ -33,9 +33,20 @@ func TestExtractionRules(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%s", site.Domain, test.Url), func(t *testing.T) {
 				var hashed = ""
 
-				resUrl, err := processURL(test.Url)
-				if test.XFail && resUrl == "" {
-					t.Logf("✅ Expected failure for: %s\n", test.Url)
+				resUrl, matched, err := matchURL("", test.Url)
+
+				// An xfail case is not a gap in the rules: it says the URL is not an article, so no named
+				// rule may match it. The catch-all resolves it instead, which is what is checked here. A
+				// named rule that starts matching a listing page fails this.
+				if test.XFail {
+					if err != nil {
+						t.Fatalf("❌ Expected the catch-all to resolve: %s\nError: %v\n\n", test.Url, err)
+					}
+					if matched.Domain != "" {
+						t.Fatalf("❌ Expected no named rule to match: %s\nMatched domain: %s\nGot: %s\n\n",
+							test.Url, matched.Domain, resUrl)
+					}
+					t.Logf("✅ No named rule matches, the catch-all resolved: %s\n", test.Url)
 					return
 				}
 
@@ -374,12 +385,12 @@ func TestAppendSortingDeterminism(t *testing.T) {
 }
 
 func TestConcurrentReadAndAppend(t *testing.T) {
-	baseRules := []byte(`{"sites": [
+	concurrentRules := []byte(`{"sites": [
   {"domain": "concurrent.com", "templates": [
     {"pattern": "^/item/(?P<ID>[^/]+)", "template": "https://concurrent.com/item/{{ .ID }}"}
   ]}
 ]}`)
-	if err := LoadRules(baseRules); err != nil {
+	if err := LoadRules(concurrentRules); err != nil {
 		t.Fatalf("LoadRules failed: %v", err)
 	}
 
@@ -431,4 +442,345 @@ func TestConcurrentReadAndAppend(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	close(stopChan)
 	wg.Wait()
+}
+
+// Rule sets for the layering tests. Both name hs.fi, so both get the same derived weight and the order of
+// the layers is the only thing that can decide which template runs first.
+const (
+	layerBaseRules = `{"sites": [
+  {"domain": "hs.fi", "templates": [
+    {"pattern": "^/a/(?P<ID>[^/]+)", "template": "https://hs.fi/base-a/{{ .ID }}"},
+    {"pattern": "^/b/(?P<ID>[^/]+)", "template": "https://hs.fi/base-b/{{ .ID }}"}
+  ]}
+]}`
+	layerOwnerRules = `{"sites": [
+  {"domain": "hs.fi", "templates": [
+    {"pattern": "^/a/(?P<ID>[^/]+)", "template": "https://hs.fi/owner-a/{{ .ID }}"}
+  ]}
+]}`
+)
+
+func mustLoad(t *testing.T, data string) {
+	t.Helper()
+	if err := LoadRules([]byte(data)); err != nil {
+		t.Fatalf("LoadRules failed: %v", err)
+	}
+}
+
+// freshBase clears the rule set registry and loads base rules. The registry is package state that outlives
+// a test, so a test that counts or names rule sets has to start from a known one.
+func freshBase(t *testing.T, data string) {
+	t.Helper()
+	for _, name := range RuleSetNames() {
+		if err := DropRules(name); err != nil {
+			t.Fatalf("DropRules(%q) failed: %v", name, err)
+		}
+	}
+	mustLoad(t, data)
+}
+
+func mustDefine(t *testing.T, name, data string) {
+	t.Helper()
+	if err := DefineRules(name, []byte(data)); err != nil {
+		t.Fatalf("DefineRules(%q) failed: %v", name, err)
+	}
+}
+
+// mustSignIn checks the URL against the named rule set. An empty name is the base rules.
+func mustSignIn(t *testing.T, name, inputURL, expected string) {
+	t.Helper()
+	res, _, err := matchURL(name, inputURL)
+	if err != nil {
+		t.Fatalf("matchURL(%q, %s) failed: %v", name, inputURL, err)
+	}
+	if res != expected {
+		t.Errorf("matchURL(%q, %s) = %s, expected %s", name, inputURL, res, expected)
+	}
+}
+
+func mustProcess(t *testing.T, inputURL, expected string) {
+	t.Helper()
+	mustSignIn(t, "", inputURL, expected)
+}
+
+func TestDefinedRuleSetLayersOverTheBase(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+
+	// Same domain and same derived weight: the layer site is first in the composed set, so it wins.
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://hs.fi/owner-a/1")
+	// The base site stays in the set below the layer and catches the paths the layer does not match.
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/b/2", "https://hs.fi/base-b/2")
+	// Naming no rule set is the base rules, which the definition did not change.
+	mustProcess(t, "https://hs.fi/a/1", "https://hs.fi/base-a/1")
+}
+
+// Naming a rule set at the point of use is the whole design: no call can put the module into a mode that a
+// later call reads by accident, so signing in two sets cannot interfere.
+func TestRuleSetsDoNotInterfere(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:a", layerOwnerRules)
+	mustDefine(t, "owner:b", `{"sites": [
+  {"domain": "hs.fi", "templates": [
+    {"pattern": "^/a/(?P<ID>[^/]+)", "template": "https://hs.fi/other-a/{{ .ID }}"}
+  ]}
+]}`)
+
+	for range 3 {
+		mustSignIn(t, "owner:a", "https://hs.fi/a/1", "https://hs.fi/owner-a/1")
+		mustSignIn(t, "owner:b", "https://hs.fi/a/1", "https://hs.fi/other-a/1")
+		mustProcess(t, "https://hs.fi/a/1", "https://hs.fi/base-a/1")
+	}
+}
+
+func TestDefineRulesReplacesAName(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+	mustDefine(t, "owner:hs.fi", `{"sites": [
+  {"domain": "hs.fi", "templates": [
+    {"pattern": "^/a/(?P<ID>[^/]+)", "template": "https://hs.fi/replaced-a/{{ .ID }}"}
+  ]}
+]}`)
+
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://hs.fi/replaced-a/1")
+	if names := RuleSetNames(); len(names) != 1 {
+		t.Errorf("Expected 1 rule set after a replacement, got %v", names)
+	}
+}
+
+// An unknown name is reported. Falling back to the base rules would sign a URL against rules the caller did
+// not ask for, and the signature would not say so.
+func TestUnknownRuleSetIsReported(t *testing.T) {
+	freshBase(t, layerBaseRules)
+
+	if _, err := getSignatureIn("owner:missing", "https://hs.fi/a/1"); err == nil {
+		t.Error("Expected an error for an unknown rule set")
+	}
+	if err := DropRules("owner:missing"); err == nil {
+		t.Error("Expected an error when dropping an unknown rule set")
+	}
+}
+
+func TestDropRules(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+
+	if err := DropRules("owner:hs.fi"); err != nil {
+		t.Fatalf("DropRules failed: %v", err)
+	}
+	if _, err := getSignatureIn("owner:hs.fi", "https://hs.fi/a/1"); err == nil {
+		t.Error("Expected the dropped rule set to be gone")
+	}
+	// Dropping a layer leaves the base rules alone.
+	mustProcess(t, "https://hs.fi/a/1", "https://hs.fi/base-a/1")
+}
+
+func TestRuleSetNames(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	for _, name := range []string{"owner:c", "owner:a", "owner:b"} {
+		mustDefine(t, name, layerOwnerRules)
+	}
+
+	got := RuleSetNames()
+	want := []string{"owner:a", "owner:b", "owner:c"}
+	if len(got) != len(want) {
+		t.Fatalf("Expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Expected %v, got %v", want, got)
+			break
+		}
+	}
+
+	for _, name := range want {
+		if err := DropRules(name); err != nil {
+			t.Fatalf("DropRules(%q) failed: %v", name, err)
+		}
+	}
+	if names := RuleSetNames(); len(names) != 0 {
+		t.Errorf("Expected no rule sets, got %v", names)
+	}
+}
+
+func TestDefineRulesAtomicOnFailure(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+
+	if err := DefineRules("owner:hs.fi", []byte(`{"sites": "this is not a list of sites"}`)); err == nil {
+		t.Fatal("Expected an error for an invalid rule set")
+	}
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://hs.fi/owner-a/1")
+
+	badPattern := fmt.Sprintf(`{"sites": [{"domain": "hs.fi", "templates": [
+  {"pattern": %q, "template": "https://hs.fi/bad/{{ .ID }}"}
+]}]}`, strings.Repeat("a", MaxPatternLength+1))
+	if err := DefineRules("owner:hs.fi", []byte(badPattern)); err == nil {
+		t.Fatal("Expected an error for a rule set that does not compile")
+	}
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://hs.fi/owner-a/1")
+
+	if err := DefineRules("", []byte(layerOwnerRules)); err == nil {
+		t.Error("Expected an error for an empty rule set name")
+	}
+}
+
+// A named set means "this layer over the base rules". If the base moves and the set does not, it keeps
+// layering over rules that are no longer active, and nothing says so.
+func TestNamedSetsFollowTheBaseRules(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/b/2", "https://hs.fi/base-b/2")
+
+	// LoadRules replaces the base.
+	mustLoad(t, `{"sites": [
+  {"domain": "hs.fi", "templates": [
+    {"pattern": "^/a/(?P<ID>[^/]+)", "template": "https://hs.fi/new-a/{{ .ID }}"},
+    {"pattern": "^/b/(?P<ID>[^/]+)", "template": "https://hs.fi/new-b/{{ .ID }}"}
+  ]}
+]}`)
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://hs.fi/owner-a/1")
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/b/2", "https://hs.fi/new-b/2")
+
+	// AppendRules grows the base.
+	if err := AppendRules([]byte(`{"sites": [
+  {"domain": "appended.example", "templates": [
+    {"pattern": "^/page/(?P<ID>[^/]+)", "template": "https://appended.example/page/{{ .ID }}"}
+  ]}
+]}`)); err != nil {
+		t.Fatalf("AppendRules failed: %v", err)
+	}
+	mustSignIn(t, "owner:hs.fi", "https://appended.example/page/1", "https://appended.example/page/1")
+}
+
+// The mirror of TestDomainCollisionPriority: there an appended rule of equal weight does not displace the
+// loaded one, here a layer of equal weight does displace it.
+func TestLayerWinsEqualWeight(t *testing.T) {
+	base, err := parseAndCompile([]byte(layerBaseRules))
+	if err != nil {
+		t.Fatalf("parseAndCompile failed: %v", err)
+	}
+	layer, err := parseAndCompile([]byte(layerOwnerRules))
+	if err != nil {
+		t.Fatalf("parseAndCompile failed: %v", err)
+	}
+
+	composed := layerOver(layer, base)
+	if len(composed.Sites) != 2 {
+		t.Fatalf("Expected 2 sites, got %d", len(composed.Sites))
+	}
+	if composed.Sites[0]._EffectiveWeight != composed.Sites[1]._EffectiveWeight {
+		t.Fatalf("Test needs equal weights, got %d and %d",
+			composed.Sites[0]._EffectiveWeight, composed.Sites[1]._EffectiveWeight)
+	}
+	if got := composed.Sites[0].Templates[0].Template; got != "https://hs.fi/owner-a/{{ .ID }}" {
+		t.Errorf("Expected the layer to sort first, got %s", got)
+	}
+}
+
+// An owner can reach every host routed to it: a catch-all with an explicit weight outranks a named rule.
+func TestWildcardWithExplicitWeightOutranksNamedRule(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", `{"sites": [
+  {"domain": "", "weight": 9999, "templates": [
+    {"template": "https://owner.example{{ .Path }}"}
+  ]}
+]}`)
+
+	mustSignIn(t, "owner:hs.fi", "https://hs.fi/a/1", "https://owner.example/a/1")
+	mustSignIn(t, "owner:hs.fi", "https://anything.example/x", "https://owner.example/x")
+	// The base rules are untouched, which is what naming the set at the point of use buys.
+	mustProcess(t, "https://hs.fi/a/1", "https://hs.fi/base-a/1")
+}
+
+// Weight is not clamped: an explicit value replaces 100 + len(domain) as given, in both directions.
+func TestExplicitWeightIsNotClamped(t *testing.T) {
+	freshBase(t, `{"sites": [
+  {"domain": "low.example", "weight": -5, "templates": [{"template": "https://low.example{{ .Path }}"}]},
+  {"domain": "", "weight": 1000000, "templates": [{"template": "https://high.example{{ .Path }}"}]}
+]}`)
+
+	cfg := GetRules()
+	if cfg.Sites[0]._EffectiveWeight != 1000000 || cfg.Sites[1]._EffectiveWeight != -5 {
+		t.Fatalf("Expected weights 1000000 then -5, got %d then %d",
+			cfg.Sites[0]._EffectiveWeight, cfg.Sites[1]._EffectiveWeight)
+	}
+	mustProcess(t, "https://low.example/x", "https://high.example/x")
+}
+
+func TestConcurrentHashAcrossRuleSets(t *testing.T) {
+	freshBase(t, layerBaseRules)
+	mustDefine(t, "owner:hs.fi", layerOwnerRules)
+
+	stopChan := make(chan struct{})
+	var wg sync.WaitGroup
+
+	// Each reader names its rule set, so every reader has one correct answer whatever the writers do.
+	for i := range 50 {
+		wg.Add(1)
+		go func(readerID int) {
+			defer wg.Done()
+			name, expected := "", "https://hs.fi/base-a/1"
+			if readerID%2 == 0 {
+				name, expected = "owner:hs.fi", "https://hs.fi/owner-a/1"
+			}
+			for {
+				select {
+				case <-stopChan:
+					return
+				default:
+					res, _, err := matchURL(name, "https://hs.fi/a/1")
+					if err != nil || res != expected {
+						t.Errorf("Concurrent reader failed: got %s, err %v", res, err)
+						return
+					}
+					// See the note in TestConcurrentReadAndAppend: this loop never blocks, so a
+					// cooperative scheduler needs the yield.
+					runtime.Gosched()
+				}
+			}
+		}(i)
+	}
+
+	// Writers churn the registry and the base underneath the readers.
+	for i := range 5 {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			name := fmt.Sprintf("churn:%d", workerID)
+			for range 10 {
+				_ = DefineRules(name, []byte(layerOwnerRules))
+				_ = LoadRules([]byte(layerBaseRules))
+				_ = DropRules(name)
+			}
+		}(i)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	close(stopChan)
+	wg.Wait()
+}
+
+// The registry is replaced whole on every write, so two writers that clone it at the same time would both
+// store a map missing the other's change. The race detector cannot see that -- every access goes through
+// the atomic pointer -- so the lost update is what this test looks for.
+func TestConcurrentDefineKeepsEveryRuleSet(t *testing.T) {
+	freshBase(t, layerBaseRules)
+
+	const writers = 20
+	var wg sync.WaitGroup
+	for i := range writers {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			if err := DefineRules(fmt.Sprintf("owner:%d", id), []byte(layerOwnerRules)); err != nil {
+				t.Errorf("DefineRules failed: %v", err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if names := RuleSetNames(); len(names) != writers {
+		t.Errorf("Expected %d rule sets after concurrent defines, got %d: %v", writers, len(names), names)
+	}
 }

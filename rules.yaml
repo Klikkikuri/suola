@@ -176,3 +176,38 @@ sites:
       - url: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar?utm_source=email
         expected: https://www.svt.se/nyhetskoll/elsa-haktades-som-17-aring-jag-satt-inlast-i-126-dagar
         signature: d7a82dc45caff0fd78b872466019f870da3c2dcf9ded4e561547b6fc54508771
+
+  # Any host without a named rule. Host and path only: the query is dropped and trailing slashes are
+  # trimmed, so tracking parameters do not split an article. A site whose articles differ only by query
+  # needs a named rule. See the README.
+  - domain: ""
+    templates:
+      - pattern: "^(?P<Path>.*?)/*$"
+        template: "https://{{ .Host }}{{ .Path }}"
+    tests:
+      - url: https://unknown.example/news/story
+        expected: https://unknown.example/news/story
+        signature: 8a8eda7ebdf27c81416fd9f9c75412f2407c7a588aae37bce0c7073670047876
+      - url: https://UNKNOWN.example/news/story/?utm_source=rss&fbclid=x
+        expected: https://unknown.example/news/story
+        signature: 8a8eda7ebdf27c81416fd9f9c75412f2407c7a588aae37bce0c7073670047876
+      - url: https://unknown.example/a/../b
+        expected: https://unknown.example/b
+        signature: 2d6e2585fe2e279602b3349c3651d85037b4484a9d5e5650b26ba2bdb814909c
+      # The root, a bare host, and a bare host with only a query are one URL; see normalizeURL.
+      - url: https://unknown.example/
+        expected: https://unknown.example/
+        signature: 3075048aecc62395fb2f8adfb7c06bd71ac99129097370500a77bd40c5c30334
+      - url: https://unknown.example
+        expected: https://unknown.example/
+        signature: 3075048aecc62395fb2f8adfb7c06bd71ac99129097370500a77bd40c5c30334
+      - url: https://unknown.example?utm_source=rss
+        expected: https://unknown.example/
+        signature: 3075048aecc62395fb2f8adfb7c06bd71ac99129097370500a77bd40c5c30334
+      # Deliberate: articles told apart only by a query collide. Such a site needs a named rule.
+      - url: https://unknown.example/article?id=1
+        expected: https://unknown.example/article
+        signature: 9c2e61041d70394bca8533e7f8e57ac229736b2ef6b544df8def817a1dd111aa
+      - url: https://unknown.example/article?id=2
+        expected: https://unknown.example/article
+        signature: 9c2e61041d70394bca8533e7f8e57ac229736b2ef6b544df8def817a1dd111aa

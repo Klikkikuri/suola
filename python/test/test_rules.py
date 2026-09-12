@@ -222,9 +222,11 @@ class TestEmbeddedRules:
         if test_case.get('xfail'):
             pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
 
+        # The wildcard rule signs every host, so a missing rule no longer shows up as None. An embedded
+        # binary older than rules.yaml now fails on the signature instead of being skipped here, which is
+        # what a stale wheel should do.
         result = suola(url)
-        if result is None:
-            pytest.xfail(f"Rule for domain '{domain}' is not included in the pre-compiled embedded WASM binary.")
+        assert result is not None, f"Expected a signature for {domain} URL: {url}"
 
         if expected_sig:
             assert result == expected_sig, f"Signature mismatch for {domain} URL: {url}"

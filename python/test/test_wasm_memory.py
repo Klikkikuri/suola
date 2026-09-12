@@ -16,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from suola.api import Suola
 from suola._wasm import MAX_RULES_SIZE, MAX_URL_LENGTH, WasmRuntime
 
+# The wildcard rule signs any host, so the only rejected input is one with no host: a scheme-only form or
+# a relative reference.
+NO_HOST_URL = "mailto:someone@example.com"
+
 
 class TestWasmMemorySafety:
     """Test suite for WASM memory pool and GC protection."""
@@ -213,28 +217,27 @@ class TestWasmMemorySafety:
         assert len(set(results)) == 1
         assert all(len(r) == 64 for r in results)
 
+    def test_unknown_host_signs_through_wildcard(self, suola):
+        """A host with no named rule is signed by the wildcard rule, not rejected."""
+        result = suola("https://www.example.com/path")
+        assert result is not None, "Expected the wildcard rule to sign an unknown host"
+        assert len(result) == 64
+
     def test_error_handling_with_memory(self, suola):
         """Test that error messages are properly handled through memory pool."""
-        # This URL should trigger a "no matching rule" error
-        invalid_url = "https://www.example.com/path"
-        
-        # with pytest.raises(RuntimeError, match="no matching rule"):
-        #     suola(invalid_url)
-        assert suola(invalid_url) is None, "Expected None for URL with no matching rule"
+        # A URL with no host is the remaining error path: it is a scheme-only form or a relative
+        # reference, and the caller must resolve a relative reference against its document.
+        assert suola(NO_HOST_URL) is None, "Expected None for a URL with no host"
 
     def test_memory_pool_after_errors(self, suola):
         """Test that memory pool continues working after errors."""
         valid_url = "https://www.iltalehti.fi/ulkomaat/a/51495a62-a494-4474-a234-ddedae3e112b"
-        invalid_url = "https://www.example.com/path"
         
         # Get valid result
         result1 = suola(valid_url)
         
         # Trigger error
-        try:
-            suola(invalid_url)
-        except RuntimeError:
-            pass
+        assert suola(NO_HOST_URL) is None
         
         # Verify memory pool still works
         result2 = suola(valid_url)
@@ -245,12 +248,8 @@ class TestWasmMemorySafety:
         # URL with Unicode characters (will be UTF-8 encoded)
         unicode_url = "https://www.iltalehti.fi/ulkomaat/a/test-ääöö-51495a62"
         
-        try:
-            result = runtime.get_signature(unicode_url)
-            assert len(result) == 64
-        except RuntimeError:
-            # It's ok if there's no matching rule
-            pass
+        result = runtime.get_signature(unicode_url)
+        assert len(result) == 64
 
     def test_memory_pool_stress(self, suola):
         """Stress test the memory pool with many allocations and GC cycles."""
