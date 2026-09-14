@@ -350,7 +350,8 @@ func normalizeURL(rawURL string) (*url.URL, error) {
 		return nil, err
 	}
 
-	if parsed.Host == "" {
+	// Hostname, not Host: an authority with only a port, as in https://:8080/, has a Host but no host.
+	if parsed.Hostname() == "" {
 		return nil, fmt.Errorf("URL has no host: %s", rawURL)
 	}
 	if parsed.Path == "" {

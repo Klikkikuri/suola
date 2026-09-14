@@ -20,7 +20,7 @@ func hashUrl(this js.Value, args []js.Value) any {
 
 	name := ""
 	if len(args) > 1 {
-		if args[1].Type() != js.TypeString || args[1].String() == "" {
+		if !isName(args[1]) {
 			return nil
 		}
 		name = args[1].String()
@@ -55,9 +55,18 @@ func loadRulesJS(this js.Value, args []js.Value) any {
 	return nil
 }
 
+// isName tells a rule set name from a value that only converts to a string. js.Value.String gives "<null>"
+// for null and "<number: 3>" for 3, so without this test such a value is used as a name.
+func isName(v js.Value) bool {
+	return v.Type() == js.TypeString && v.String() != ""
+}
+
 func defineRulesJS(this js.Value, args []js.Value) any {
 	if len(args) < 2 {
 		return "rule set name and rules data required"
+	}
+	if !isName(args[0]) {
+		return "rule set name must be a non-empty string"
 	}
 	if err := DefineRules(args[0].String(), []byte(args[1].String())); err != nil {
 		return err.Error()
@@ -68,6 +77,9 @@ func defineRulesJS(this js.Value, args []js.Value) any {
 func dropRulesJS(this js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return "rule set name required"
+	}
+	if !isName(args[0]) {
+		return "rule set name must be a non-empty string"
 	}
 	if err := DropRules(args[0].String()); err != nil {
 		return err.Error()

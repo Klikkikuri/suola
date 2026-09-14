@@ -22,8 +22,9 @@ produce the same signature, regardless of its original format.
 keeps the host and the path, drops the query and trims trailing slashes: tracking parameters are the
 common case and must not split an article, and an article told apart only by its query is the rare case
 that needs a named rule of its own. A host with a named rule is unaffected — the wildcard rule has
-weight `0`, so every named rule is evaluated first, and the wildcard rule only catches what falls
-through.
+weight `0` and a named rule has a default weight above `0`, so each named rule is evaluated first, and
+the wildcard rule only catches what falls through. An explicit `weight` is not clamped: a named rule
+with a negative weight is evaluated after the wildcard rule, which catches its URLs first.
 
 An input with no host is rejected rather than signed, and a bare host signs as its root. See
 [URLs that the module refuses](docs/api.md#urls-that-the-module-refuses).

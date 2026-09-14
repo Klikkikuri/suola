@@ -144,6 +144,23 @@ func TestWildcardAndDomainMatching(t *testing.T) {
 	}
 }
 
+// The wildcard rule matches every host, so an input with no host must be refused before matching, or it signs.
+func TestURLWithoutHostIsRefused(t *testing.T) {
+	freshBase(t, `{"sites": [{"domain": "", "templates": [{"template": "{{ .URL }}"}]}]}`)
+
+	for _, inputURL := range []string{
+		"mailto:someone@example.com",
+		"about:blank",
+		"/relative/path",
+		"https:///path",
+		"https://:8080/path", // A port without a host: Host is ":8080", Hostname is empty.
+	} {
+		if res, err := processURL(inputURL); err == nil {
+			t.Errorf("processURL(%q) = %q, expected an error for a URL with no host", inputURL, res)
+		}
+	}
+}
+
 func TestSiteWeightCalculation(t *testing.T) {
 	// Rules defining catch-all first, then com, example.com, www.example.com, and an explicit weight override.
 	customRules := []byte(`{"sites": [

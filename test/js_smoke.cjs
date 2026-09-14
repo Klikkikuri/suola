@@ -153,6 +153,18 @@ WebAssembly.instantiate(fs.readFileSync(path.join(buildDir, "js.wasm")), go.impo
       assert(typeof globalThis.dropRules("owner:other") === "string", "dropping an unknown name is not reported");
     });
 
+    check("refuses a rule set name that is not a string", () => {
+      // A value that only converts to a string must not become a name, as null would become "<null>".
+      const before = JSON.stringify(globalThis.listRules());
+      for (const bad of [undefined, null, 0, 3, "", {}, [], true]) {
+        const label = JSON.stringify(bad) ?? "undefined";
+        const defined = globalThis.defineRules(bad, ownerRules("bad"));
+        assert(typeof defined === "string", `defineRules(${label}, json) gave ${defined}`);
+        assert(typeof globalThis.dropRules(bad) === "string", `dropRules(${label}) is not reported`);
+      }
+      assert(JSON.stringify(globalThis.listRules()) === before, `the names changed: ${globalThis.listRules()}`);
+    });
+
     check("returns null for a second argument that is not a name", () => {
       // Each of these is a caller that asked for a rule set and named none. Answering from the base rules
       // would give a valid signature made with rules the caller did not ask for.

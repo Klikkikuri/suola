@@ -137,7 +137,11 @@ class TestRules:
         domain = test_case['domain']
 
         if test_case.get('xfail'):
-            pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
+            # The wildcard rule resolves an xfail URL. That no named rule matches is checked in main_test.go,
+            # because the signature does not tell which rule made it.
+            result = suola(url)
+            assert result is not None and len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            return
 
         if expected_sig:
             signature = suola(url)
@@ -214,13 +218,16 @@ class TestEmbeddedRules:
 
     @pytest.mark.parametrize("test_case", extract_test_cases())
     def test_embedded_rule_case(self, suola, test_case):
-        """Test rule cases against default embedded rules, marking missing rules as xfail."""
+        """Test rule cases against default embedded rules."""
         url = test_case['url']
         expected_sig = test_case.get('signature')
         domain = test_case['domain']
 
         if test_case.get('xfail'):
-            pytest.xfail(f"Known unsupported rule for {domain} URL: {url}")
+            # See test_individual_rule_case: only the wildcard signature can be checked here.
+            result = suola(url)
+            assert result is not None and len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            return
 
         # The wildcard rule signs every host, so a missing rule no longer shows up as None. An embedded
         # binary older than rules.yaml now fails on the signature instead of being skipped here, which is

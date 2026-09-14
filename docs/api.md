@@ -123,7 +123,7 @@ The WASI module keeps only the base rules. It has no named rule sets.
 
 | Export | Result |
 | --- | --- |
-| `_initialize()` | Starts the module. Call it one time, before each other export. |
+| `_initialize()` | Starts the module. Call it one time, before the first call to a different export. |
 | `Malloc(size uint32) uint32` | A pointer to a new buffer of `size` bytes. 0 after a failure. |
 | `Free(ptr uint32)` | Releases a buffer that came from `Malloc`. |
 | `GetSignature(urlPtr, urlLen uint32) uint64` | A packed result that holds the signature of the URL. |
