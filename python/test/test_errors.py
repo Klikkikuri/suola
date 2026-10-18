@@ -1,5 +1,6 @@
 """Every failure surfaces as a SuolaError subclass, and a trapped instance refuses later calls."""
 
+import faulthandler
 import os
 import shutil
 
@@ -22,6 +23,16 @@ def test_bad_custom_rules_raise_invalid_rules_error(tmp_path, content):
     rules.write_text(content)
     with pytest.raises(InvalidRulesError, match="exited with code 1. The module writes the reason to stderr"):
         Suola(custom_rules=rules)
+
+
+def test_trap_raises_when_faulthandler_is_enabled(tmp_path):
+    """A real trap: the module panics because the rules path is a directory.
+
+    With signal-based traps, faulthandler gets the trap signal first and kills the process.
+    """
+    faulthandler.enable()
+    with pytest.raises(SuolaError):
+        Suola(custom_rules=tmp_path)
 
 
 def test_module_that_is_not_wasm_raises_runtime_error(tmp_path):

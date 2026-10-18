@@ -29,11 +29,15 @@ logger = logging.getLogger(__name__)
 def _engine() -> wasmtime.Engine:
     """One engine per process: wasmtime shares an Engine and its compiled Modules between threads and Stores.
 
-    Parallel compilation is off, because its thread pool does not survive ``fork``: a forked child that compiles
-    a module hangs. The module is compiled once per process, so the extra time is small.
+    - Parallel compilation is off, because its thread pool does not survive ``fork``: a forked child that
+      compiles a module hangs. The module is compiled once per process, so the extra time is small.
+    - Traps do not use signals. A signal handler that the program installs after wasmtime, for example
+      :mod:`faulthandler` in pytest, otherwise gets the trap signal and kills the process. Explicit checks make
+      a call about 5% slower.
     """
     config = wasmtime.Config()
     config.parallel_compilation = False
+    config.signals_based_traps = False
     return wasmtime.Engine(config)
 
 
