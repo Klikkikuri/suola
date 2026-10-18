@@ -3,6 +3,8 @@
 import faulthandler
 import os
 import shutil
+import subprocess
+import sys
 
 import pytest
 import wasmtime
@@ -148,6 +150,12 @@ def test_module_is_compiled_once_for_each_content(tmp_path, wasm_path):
     module.write_bytes(wasm_path.read_bytes() + CUSTOM_SECTION)
     os.utime(module, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     assert _wasm._compile(module) is not first
+
+
+def test_import_does_not_create_the_engine():
+    code = "import suola, suola._wasm as w; print(w._engine.cache_info().currsize)"
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "0"
 
 
 def test_all_errors_share_a_base_class():

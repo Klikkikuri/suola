@@ -26,6 +26,7 @@ _MODULE_FAULTS = ("invalid buffer", "invalid pointer", "rules not loaded", "unkn
 logger = logging.getLogger(__name__)
 
 
+@functools.cache
 def _engine() -> wasmtime.Engine:
     """One engine per process: wasmtime shares an Engine and its compiled Modules between threads and Stores.
 
@@ -39,9 +40,6 @@ def _engine() -> wasmtime.Engine:
     config.parallel_compilation = False
     config.signals_based_traps = False
     return wasmtime.Engine(config)
-
-
-_ENGINE = _engine()
 
 
 @contextlib.contextmanager
@@ -63,7 +61,7 @@ def _compile(path: Path) -> wasmtime.Module:
 @functools.lru_cache(maxsize=8)
 def _compile_wasm(wasm: bytes) -> wasmtime.Module:
     """Cached by content, so that a rebuilt file is compiled again also when its size and mtime did not change."""
-    return wasmtime.Module(_ENGINE, wasm)
+    return wasmtime.Module(_engine(), wasm)
 
 
 @functools.cache
@@ -111,7 +109,7 @@ class WasmRuntime:
         self.module = _packaged_module() if wasm_path is None else _compile(Path(wasm_path).resolve())
 
         # Create linker with WASI imports
-        self.linker = wasmtime.Linker(_ENGINE)
+        self.linker = wasmtime.Linker(_engine())
         self.linker.define_wasi()
 
         # Create store with WASI context
@@ -136,7 +134,7 @@ class WasmRuntime:
             wasi.argv = ["suola.wasm", str(custom_rules_path)]
             logger.debug("Custom rules path set to: %s", custom_rules_path)
 
-        self.store = wasmtime.Store(_ENGINE)
+        self.store = wasmtime.Store(_engine())
         self.store.set_wasi(wasi)
 
         with _wasm_errors(SuolaRuntimeError, "Cannot instantiate WASI module"):
