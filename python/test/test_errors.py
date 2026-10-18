@@ -21,8 +21,13 @@ BAD_REGEX_RULES = '{"sites": [{"domain": "x.fi", "templates": [{"pattern": "(", 
 def test_bad_custom_rules_raise_invalid_rules_error(tmp_path, content):
     rules = tmp_path / "rules.json"
     rules.write_text(content)
-    with pytest.raises(InvalidRulesError, match="exited with code 1. The module writes the reason to stderr"):
+    with pytest.raises(InvalidRulesError, match="The module writes the reason to stderr"):
         Suola(custom_rules=rules)
+
+
+def test_unreadable_custom_rules_raise_invalid_rules_error(tmp_path):
+    with pytest.raises(InvalidRulesError, match="Cannot load custom rules"):
+        Suola(custom_rules=tmp_path)
 
 
 def test_trap_raises_when_faulthandler_is_enabled(tmp_path):

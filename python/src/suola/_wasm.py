@@ -154,11 +154,12 @@ class WasmRuntime:
             with _wasm_errors(SuolaRuntimeError, "WASI module failed to initialize"):
                 self._initialize()
         except SuolaRuntimeError as e:
-            # The module loads its rules when it starts, and exits with a non-zero code when they are not valid.
-            if custom_rules_path is not None and isinstance(e.__cause__, wasmtime.ExitTrap):
+            # The module loads its rules when it starts. It exits for rules that are not valid and panics for a
+            # file that it cannot read. A TinyGo panic is a trap and a Go panic is an exit, so both mean bad rules.
+            if custom_rules_path is not None and e.__cause__ is not None:
                 raise InvalidRulesError(
-                    f"Cannot load custom rules {custom_rules_path}: the WASI module exited with code "
-                    f"{e.__cause__.code}. The module writes the reason to stderr."
+                    f"Cannot load custom rules {custom_rules_path}: {e.__cause__}. "
+                    "The module writes the reason to stderr."
                 ) from e.__cause__
             raise
 
