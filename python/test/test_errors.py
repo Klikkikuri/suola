@@ -120,6 +120,16 @@ def test_host_error_does_not_disable_the_instance():
     assert len(runtime.get_signature(ARTICLE_URL)) == 64
 
 
+def test_pointer_above_2_gib_is_not_written_before_memory():
+    """A negative i32 pointer means an offset of 2 GiB or more, which is outside this module's memory."""
+    runtime = WasmRuntime()
+    runtime.malloc_fn = lambda store, size: -16
+    runtime.free_fn = lambda store, ptr: None
+
+    with pytest.raises(SuolaRuntimeError, match=f"Memory overflow: ptr={2**32 - 16}"):
+        runtime.get_signature(ARTICLE_URL)
+
+
 def test_rebuilt_module_is_compiled_again(tmp_path, wasm_path):
     module = tmp_path / "suola.wasm"
     shutil.copy(wasm_path, module)

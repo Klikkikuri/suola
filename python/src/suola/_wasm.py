@@ -221,13 +221,16 @@ class WasmRuntime:
 
     def _write(self, ptr: int, data: bytes) -> None:
         """Copy ``data`` into module memory at ``ptr``."""
+        # wasmtime gives an i32 as a signed int. A pointer at 2 GiB or more is negative, and would pass the bounds
+        # check and write before the start of linear memory.
+        offset = ptr & 0xFFFFFFFF
         memory_size = self.memory.data_len(self.store)
-        if ptr + len(data) > memory_size:
-            raise SuolaRuntimeError(f"Memory overflow: ptr={ptr}, len={len(data)}, memory_size={memory_size}")
+        if offset + len(data) > memory_size:
+            raise SuolaRuntimeError(f"Memory overflow: ptr={offset}, len={len(data)}, memory_size={memory_size}")
 
         memory_data = self.memory.data_ptr(self.store)
         src = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
-        ctypes.memmove(ctypes.addressof(memory_data.contents) + ptr, src, len(data))
+        ctypes.memmove(ctypes.addressof(memory_data.contents) + offset, src, len(data))
 
     def _call(self, fn: wasmtime.Func, data: bytes) -> tuple[bool, str]:
         """Copy ``data`` into module memory, call ``fn`` with it and return the unpacked result.
