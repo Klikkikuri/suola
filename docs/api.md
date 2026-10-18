@@ -202,10 +202,16 @@ The rules file must be compiled JSON. The WASI module must also have access to t
 interface opens the directory of the file for you.
 
 `Suola` loads the `suola.wasm` that the wheel contains. To load a different module, give its path as
-`wasm_module`. Suola does not look for a module in other locations.
+`wasm_module`. Suola does not look for a module in other locations. An editable install of `python/` has no
+packaged module, because the wheel build copies it from `build/wasi.wasm`. For an editable install, give
+`wasm_module="build/wasi.wasm"`, or install the wheel that `make build-python` makes.
 
-A `Suola` instance is safe to share between threads. Each instance serializes its calls into the module. The
-compiled module is shared between instances in the same process, and is compiled again when its file changes.
+A `Suola` instance is safe to share between threads. Each instance serializes its calls into the module.
+Instances in the same process share the compiled module. Suola compiles a module file again when its content
+changes. It compiles the packaged module one time for each process.
+
+Do not fork while a different thread calls into a `Suola` instance. The lock of the instance then stays locked
+in the child process. Create the instances after the fork, or fork before the threads start.
 
 Errors:
 
@@ -217,6 +223,9 @@ Errors:
 
 All three are subclasses of `SuolaError`. After a trap, the state of the module is unknown. The instance then
 raises `SuolaRuntimeError` for each later call. Create a new instance to continue.
+
+A file that does not exist raises `FileNotFoundError`, not a `SuolaError`. This applies to `wasm_module`,
+`custom_rules` and a missing packaged module.
 
 > **Design.** A signature is always a `str`. Before v0.7.0, `Suola()` returned `None` for each error, so a
 > caller could not tell a refused URL from a broken module.
