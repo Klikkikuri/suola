@@ -26,8 +26,19 @@ _MODULE_FAULTS = ("invalid buffer", "invalid pointer", "rules not loaded", "unkn
 logger = logging.getLogger(__name__)
 
 
-@functools.cache
+# The functools caches do not lock on a miss. Two threads could thus create two engines, and a module that one
+# engine compiled cannot run in a store of the other. The lock also prevents a second compile of one module.
+_CACHE_LOCK = threading.RLock()
+
+
 def _engine() -> wasmtime.Engine:
+    """The engine of this process."""
+    with _CACHE_LOCK:
+        return _create_engine()
+
+
+@functools.cache
+def _create_engine() -> wasmtime.Engine:
     """One engine per process: wasmtime shares an Engine and its compiled Modules between threads and Stores.
 
     - Parallel compilation is off, because its thread pool does not survive ``fork``: a forked child that
@@ -54,7 +65,7 @@ def _wasm_errors(error: type[SuolaError], context: str) -> Iterator[None]:
 def _compile(path: Path) -> wasmtime.Module:
     """Compile the WASI module at ``path``, once for each content of the file."""
     wasm = path.read_bytes()
-    with _wasm_errors(SuolaRuntimeError, f"Cannot compile WASI module {path}"):
+    with _CACHE_LOCK, _wasm_errors(SuolaRuntimeError, f"Cannot compile WASI module {path}"):
         return _compile_wasm(wasm)
 
 

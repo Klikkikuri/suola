@@ -153,9 +153,44 @@ def test_module_is_compiled_once_for_each_content(tmp_path, wasm_path):
 
 
 def test_import_does_not_create_the_engine():
-    code = "import suola, suola._wasm as w; print(w._engine.cache_info().currsize)"
+    code = "import suola, suola._wasm as w; print(w._create_engine.cache_info().currsize)"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "0"
+
+
+COLD_START = """
+import sys, threading
+from suola import Suola, _wasm
+
+errors = []
+
+def create(barrier):
+    barrier.wait()
+    try:
+        Suola(wasm_module=sys.argv[1])("https://example.com/a")
+    except Exception as e:
+        errors.append(e)
+
+# The race depends on timing, so start cold several times. Each round empties the engine and module caches.
+for _ in range(5):
+    _wasm._create_engine.cache_clear()
+    _wasm._compile_wasm.cache_clear()
+    barrier = threading.Barrier(16)
+    threads = [threading.Thread(target=create, args=(barrier,)) for _ in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+print(len(errors), errors[:1])
+"""
+
+
+def test_first_instances_from_many_threads_share_one_engine(wasm_path):
+    """A new process, so that the engine and the module caches are empty when the threads start."""
+    result = subprocess.run(
+        [sys.executable, "-c", COLD_START, str(wasm_path)], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.startswith("0 "), result.stdout
 
 
 def test_all_errors_share_a_base_class():
