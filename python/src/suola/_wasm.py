@@ -54,16 +54,16 @@ def _wasm_errors(error: type[SuolaError], context: str) -> Iterator[None]:
 
 
 def _compile(path: Path) -> wasmtime.Module:
-    """Compile the WASI module at ``path``, once for each version of the file."""
-    stat = path.stat()
-    return _compile_file(path, stat.st_mtime_ns, stat.st_size)
+    """Compile the WASI module at ``path``, once for each content of the file."""
+    wasm = path.read_bytes()
+    with _wasm_errors(SuolaRuntimeError, f"Cannot compile WASI module {path}"):
+        return _compile_wasm(wasm)
 
 
 @functools.lru_cache(maxsize=8)
-def _compile_file(path: Path, mtime_ns: int, size: int) -> wasmtime.Module:
-    """Cached by the modification time and size too, so that a rebuilt file is compiled again."""
-    with _wasm_errors(SuolaRuntimeError, f"Cannot compile WASI module {path}"):
-        return wasmtime.Module.from_file(_ENGINE, str(path))
+def _compile_wasm(wasm: bytes) -> wasmtime.Module:
+    """Cached by content, so that a rebuilt file is compiled again also when its size and mtime did not change."""
+    return wasmtime.Module(_ENGINE, wasm)
 
 
 @functools.cache

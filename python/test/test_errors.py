@@ -130,15 +130,23 @@ def test_pointer_above_2_gib_is_not_written_before_memory():
         runtime.get_signature(ARTICLE_URL)
 
 
-def test_rebuilt_module_is_compiled_again(tmp_path, wasm_path):
+# An empty custom section named "x". Appended to a module, it changes the content but not the behaviour.
+CUSTOM_SECTION = b"\x00\x02\x01x"
+
+
+def test_module_is_compiled_once_for_each_content(tmp_path, wasm_path):
     module = tmp_path / "suola.wasm"
-    shutil.copy(wasm_path, module)
+    shutil.copy2(wasm_path, module)
+    copy = tmp_path / "copy.wasm"
+    shutil.copy2(wasm_path, copy)
 
     first = _wasm._compile(module)
     assert _wasm._compile(module) is first
+    assert _wasm._compile(copy) is first
 
     stat = module.stat()
-    os.utime(module, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    module.write_bytes(wasm_path.read_bytes() + CUSTOM_SECTION)
+    os.utime(module, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     assert _wasm._compile(module) is not first
 
 
