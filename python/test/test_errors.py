@@ -52,20 +52,40 @@ def test_url_that_is_not_valid_unicode_raises_invalid_url_error():
         Suola()("https://example.com/\udcff")
 
 
+MODULE_FAULTS = [
+    "invalid pointer 16: not a buffer returned by Malloc",
+    "invalid buffer length: 0",
+    "rules not loaded",
+    'unknown rule set "x"',
+]
+
+
 @pytest.mark.parametrize(
-    ("message", "error"),
+    "message",
     [
-        ("URL has no host: mailto:x@example.com", InvalidURLError),
-        ("no matching rule found for host example.com", InvalidURLError),
-        ("URL length 70000 exceeds maximum of 65536 bytes", InvalidURLError),
-        ("invalid pointer 16: not a buffer returned by Malloc", SuolaRuntimeError),
-        ("invalid buffer length: 0", SuolaRuntimeError),
-        ("rules not loaded", SuolaRuntimeError),
-        ('unknown rule set "x"', SuolaRuntimeError),
+        "URL has no host: mailto:x@example.com",
+        "no matching rule found for host example.com",
+        "URL length 70000 exceeds maximum of 65536 bytes",
     ],
 )
-def test_signature_errors_are_classified(message, error):
-    assert type(_wasm._signature_error(message)) is error
+def test_url_errors_are_input_errors(message):
+    assert type(_wasm._module_error(message, InvalidURLError)) is InvalidURLError
+
+
+@pytest.mark.parametrize("message", ["parsing rules JSON: unexpected end of JSON input", "rules data is empty"])
+def test_rules_errors_are_input_errors(message):
+    assert type(_wasm._module_error(message, InvalidRulesError)) is InvalidRulesError
+
+
+@pytest.mark.parametrize("input_error", [InvalidURLError, InvalidRulesError])
+@pytest.mark.parametrize("message", MODULE_FAULTS)
+def test_module_faults_are_runtime_errors(message, input_error):
+    assert type(_wasm._module_error(message, input_error)) is SuolaRuntimeError
+
+
+def test_append_rules_reports_bad_json_as_invalid_rules_error():
+    with pytest.raises(InvalidRulesError, match="parsing rules JSON"):
+        Suola().append_rules(b'{"sites": [')
 
 
 def test_trap_disables_the_instance():

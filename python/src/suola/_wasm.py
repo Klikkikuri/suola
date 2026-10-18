@@ -20,7 +20,7 @@ MAX_RULES_SIZE = 2 * 1024 * 1024
 # Failures inside the module. Its state is unknown after one, so the instance must not be called again.
 _TRAPS = (wasmtime.Trap, wasmtime.ExitTrap)
 
-# GetSignature errors that report a host or module fault, not a bad URL (ptrToBytes in wasi.go, lib.go).
+# Module errors that report a host or module fault, not a bad input (ptrToBytes in wasi.go, lib.go).
 _MODULE_FAULTS = ("invalid buffer", "invalid pointer", "rules not loaded", "unknown rule set")
 
 logger = logging.getLogger(__name__)
@@ -82,11 +82,11 @@ def _packaged_module() -> wasmtime.Module:
         return _compile(path)
 
 
-def _signature_error(message: str) -> SuolaError:
-    """Classify an error that GetSignature reports."""
+def _module_error(message: str, input_error: type[SuolaError]) -> SuolaError:
+    """Classify an error that the module reports: a fault becomes :class:`SuolaRuntimeError`, else ``input_error``."""
     if message.startswith(_MODULE_FAULTS):
         return SuolaRuntimeError(f"WASM error: {message}")
-    return InvalidURLError(message)
+    return input_error(message)
 
 
 class WasmRuntime:
@@ -289,7 +289,7 @@ class WasmRuntime:
 
         is_error, result = self._call(self.get_signature_fn, url_bytes)
         if is_error:
-            raise _signature_error(result)
+            raise _module_error(result, InvalidURLError)
         return result
 
     def append_rules(self, rules: str | bytes | Path) -> None:
@@ -335,7 +335,7 @@ class WasmRuntime:
 
         is_error, err_msg = self._call(self.append_rules_fn, rules_bytes)
         if is_error:
-            raise InvalidRulesError(f"Failed to append rules: {err_msg or 'Unknown WASM error'}")
+            raise _module_error(err_msg or "Unknown WASM error", InvalidRulesError)
 
 
 if __name__ == "__main__":
