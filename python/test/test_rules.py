@@ -14,6 +14,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from suola import InvalidURLError
 from suola.api import Suola
 
 BUILD_DIR = Path(__file__).parent.parent.parent / "build"
@@ -140,7 +141,7 @@ class TestRules:
             # The wildcard rule resolves an xfail URL. That no named rule matches is checked in main_test.go,
             # because the signature does not tell which rule made it.
             result = suola(url)
-            assert result is not None and len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            assert len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
             return
 
         if expected_sig:
@@ -148,7 +149,6 @@ class TestRules:
             assert signature == expected_sig, f"Signature mismatch for {domain} URL: {url}"
         else:
             result = suola(url)
-            assert result is not None
             assert len(result) == 64  # SHA-256 hex string length
 
     def test_iltalehti_fi_article_url(self, suola):
@@ -170,7 +170,6 @@ class TestRules:
 
             if expected_normalized and expected_normalized != url:
                 signature = suola(url)
-                assert signature is not None
                 assert len(signature) == 64
                 assert signature.isalnum()
 
@@ -183,7 +182,7 @@ class TestRules:
             sig1 = suola(url1)
             sig2 = suola(url2)
             assert sig1 == sig2, "Section should be case-insensitive"
-        except RuntimeError as e:
+        except InvalidURLError as e:
             if "no matching rule" in str(e):
                 pytest.skip("URL pattern not matching, rules may have changed")
             raise
@@ -226,14 +225,12 @@ class TestEmbeddedRules:
         if test_case.get('xfail'):
             # See test_individual_rule_case: only the wildcard signature can be checked here.
             result = suola(url)
-            assert result is not None and len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            assert len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
             return
 
-        # The wildcard rule signs every host, so a missing rule no longer shows up as None. An embedded
-        # binary older than rules.yaml now fails on the signature instead of being skipped here, which is
-        # what a stale wheel should do.
+        # The wildcard rule signs every host. An embedded binary older than rules.yaml fails on the signature
+        # instead of being skipped here, which is what a stale wheel should do.
         result = suola(url)
-        assert result is not None, f"Expected a signature for {domain} URL: {url}"
 
         if expected_sig:
             assert result == expected_sig, f"Signature mismatch for {domain} URL: {url}"

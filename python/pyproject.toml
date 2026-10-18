@@ -5,7 +5,6 @@ description = "Klikkikuri shared URL normalization and hashing WebAssembly modul
 license = "EUPL-1.2"
 requires-python = ">=3.11"
 dependencies = [
-    "platformdirs>=4.3.8",
     "wasmtime>=39.0.0",
 ]
 authors = [
