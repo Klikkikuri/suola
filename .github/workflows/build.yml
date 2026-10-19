@@ -93,6 +93,18 @@ jobs:
             -v ${{ github.workspace }}/build:/app/build \
             python-test-runner
 
+      # The Python tests use an editable install with the test dependencies. This step installs the built wheel
+      # alone, so that a missing runtime dependency or a missing packaged module fails here and not in a release.
+      # It runs from /tmp, so that no module in the working directory can take the place of the packaged one.
+      - name: "🧪 Smoke-test the python wheel in a clean environment"
+        run: |
+          docker run --rm -v ${{ github.workspace }}/build:/dist:ro python:3.13-slim sh -euc '
+            python -m venv /tmp/smoke
+            /tmp/smoke/bin/pip install --quiet /dist/suola-*.whl
+            cd /tmp
+            /tmp/smoke/bin/python -I -c "import suola; assert len(suola.Suola()(\"https://example.com/a\")) == 64"
+          '
+
       - name: "🔧 Fix artifact and cache permissions"
         if: always()
         run: sudo chown -R $(id -u):$(id -g) build/ .gocache/ .uvcache/ || true

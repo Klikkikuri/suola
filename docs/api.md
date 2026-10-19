@@ -168,6 +168,9 @@ result string is the error message.
 - Do not call `Free` on a result pointer. The module owns the result.
 - Read a result before you make more calls. The module keeps only the most recent results, and releases the
   older results. Copy the bytes immediately after the call returns.
+- Make one call at a time. The module runs on one thread. A host that shares an instance between threads
+  must serialize the sequence from `Malloc` to the read of the result. Wasmtime does not let more than one
+  thread use a `Store` at the same time.
 
 > **Design.** The module allocates each result, so the module also releases it. If the host released a
 > result, a host that follows the earlier contract would leak one allocation for each call. The module keeps
@@ -178,19 +181,54 @@ result string is the error message.
 
 ```python
 from pathlib import Path
-from suola._wasm import WasmRuntime
+from suola import InvalidURLError, Suola
 
 # The embedded rules
-runtime = WasmRuntime()
-signature = runtime.get_signature("https://example.com/article")
+suola = Suola()
+signature = suola("https://example.com/article")
 
 # A different rule set
-runtime_custom = WasmRuntime(custom_rules_path=Path("/path/to/custom_rules.json"))
-signature = runtime_custom.get_signature("https://example.com/article")
+suola_custom = Suola(custom_rules=Path("/path/to/custom_rules.json"))
+signature = suola_custom("https://example.com/article")
+
+# A URL that the rules refuse
+try:
+    suola("mailto:someone@example.com")
+except InvalidURLError as e:
+    print(f"Not signed: {e}")
 ```
 
 The rules file must be compiled JSON. The WASI module must also have access to the file. The Python
 interface opens the directory of the file for you.
+
+`Suola` loads the `suola.wasm` that the wheel contains. To load a different module, give its path as
+`wasm_module`. Suola does not look for a module in other locations. An editable install of `python/` has no
+packaged module, because the wheel build copies it from `build/wasi.wasm`. For an editable install, give
+`wasm_module="build/wasi.wasm"`, or install the wheel that `make build-python` makes.
+
+A `Suola` instance is safe to share between threads. Each instance serializes its calls into the module.
+Instances in the same process share the compiled module. Suola compiles a module file again when its content
+changes. It compiles the packaged module one time for each process.
+
+Do not fork while a different thread calls into a `Suola` instance. The lock of the instance then stays locked
+in the child process. Create the instances after the fork, or fork before the threads start.
+
+Errors:
+
+| Exception | Cause |
+| --- | --- |
+| `InvalidURLError` (a `ValueError`) | The URL is empty, too long, not valid Unicode, has no host or cannot be parsed, or no rule matches it. |
+| `InvalidRulesError` (a `ValueError`) | The rules are empty, too large or not valid. `custom_rules` raises it when `Suola` is created, `append_rules` when it is called. |
+| `SuolaRuntimeError` (a `RuntimeError`) | The module cannot be compiled or started, or it trapped. |
+
+All three are subclasses of `SuolaError`. After a trap, the state of the module is unknown. The instance then
+raises `SuolaRuntimeError` for each later call. Create a new instance to continue.
+
+A file that does not exist raises `FileNotFoundError`, not a `SuolaError`. This applies to `wasm_module`,
+`custom_rules` and a missing packaged module.
+
+> **Design.** A signature is always a `str`. Before v0.7.0, `Suola()` returned `None` for each error, so a
+> caller could not tell a refused URL from a broken module.
 
 ## Command line
 

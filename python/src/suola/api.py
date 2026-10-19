@@ -19,6 +19,7 @@ class SuolaAPI(Protocol):
 
         :param url: The URL to normalize and hash
         :return: The hashed URL
+        :raises InvalidURLError: If the URL cannot be signed.
         """
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -43,7 +44,7 @@ class Suola(SuolaAPI):
         """
         Initialize the Suola API with WASM runtime.
 
-        :param wasm_module: Optional path to the WASI module. If not provided, it will be automatically located.
+        :param wasm_module: Optional path to the WASI module. If not provided, the module packaged in the wheel is used.
         :param custom_rules: Optional path to a compiled JSON rules file. If not provided, uses embedded default rules.
         """
         if wasm_module is not None:
@@ -58,22 +59,16 @@ class Suola(SuolaAPI):
         else:
             logger.debug("Suola API initialized with default embedded rules")
 
-    def __call__(self, url: str) -> str | None:
+    def __call__(self, url: str) -> str:
         """
         Hash a URL using the WASM runtime.
 
         :param url: The URL to normalize and hash
-        :return: The hashed URL or None if an error occurs
+        :return: The hashed URL
+        :raises InvalidURLError: If the URL is empty, too long or rejected by the rules.
+        :raises SuolaRuntimeError: If the WASI module fails.
         """
-        url = str(url).strip()
-        if not url:
-            raise ValueError("URL cannot be empty")
-        try:
-            hash = self._runtime.get_signature(url)
-            return hash
-        except Exception as e:
-            logger.error(f"Error hashing URL: {e}")
-        return None
+        return self._runtime.get_signature(str(url).strip())
 
     def append_rules(self, rules: str | Path | bytes) -> None:
         """
@@ -83,6 +78,7 @@ class Suola(SuolaAPI):
         them with ``make rules`` (see ``cmd/rules-compile``) before passing them here.
 
         :param rules: Path to a JSON rules file, JSON string, or bytes
+        :raises InvalidRulesError: If the rules are empty, too large or rejected by the module.
 
         Note on string resolution:
         If a `str` is passed, it is treated as literal JSON content if it starts with '{'.

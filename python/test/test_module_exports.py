@@ -15,7 +15,6 @@ import wasmtime
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from suola._wasm import get_wasi_module
 
 # The exports a host needs, with their exact signatures. Types are spelled out
 # because a changed arity or width is an ABI break that would otherwise surface
@@ -29,10 +28,10 @@ EXPECTED_FUNCTIONS = {
 
 
 @pytest.fixture(scope="module")
-def exports():
+def exports(wasm_path):
     """Exports of the WASI module, by name. No instantiation."""
     engine = wasmtime.Engine()
-    module = wasmtime.Module.from_file(engine, str(get_wasi_module()))
+    module = wasmtime.Module.from_file(engine, str(wasm_path))
     return {export.name: export.type for export in module.exports}
 
 

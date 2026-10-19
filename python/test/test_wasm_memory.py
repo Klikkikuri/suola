@@ -6,6 +6,7 @@ NOTE: AI GENERATED TESTS
 import ctypes
 import gc
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from suola import InvalidURLError
 from suola.api import Suola
 from suola._wasm import MAX_RULES_SIZE, MAX_URL_LENGTH, WasmRuntime
 
@@ -220,14 +222,14 @@ class TestWasmMemorySafety:
     def test_unknown_host_signs_through_wildcard(self, suola):
         """A host with no named rule is signed by the wildcard rule, not rejected."""
         result = suola("https://www.example.com/path")
-        assert result is not None, "Expected the wildcard rule to sign an unknown host"
-        assert len(result) == 64
+        assert len(result) == 64, "Expected the wildcard rule to sign an unknown host"
 
     def test_error_handling_with_memory(self, suola):
         """Test that error messages are properly handled through memory pool."""
         # A URL with no host is the remaining error path: it is a scheme-only form or a relative
         # reference, and the caller must resolve a relative reference against its document.
-        assert suola(NO_HOST_URL) is None, "Expected None for a URL with no host"
+        with pytest.raises(InvalidURLError):
+            suola(NO_HOST_URL)
 
     def test_memory_pool_after_errors(self, suola):
         """Test that memory pool continues working after errors."""
@@ -237,7 +239,8 @@ class TestWasmMemorySafety:
         result1 = suola(valid_url)
         
         # Trigger error
-        assert suola(NO_HOST_URL) is None
+        with pytest.raises(InvalidURLError):
+            suola(NO_HOST_URL)
         
         # Verify memory pool still works
         result2 = suola(valid_url)
@@ -270,6 +273,19 @@ class TestWasmMemorySafety:
             # Force GC frequently
             if i % 5 == 0:
                 gc.collect()
+
+    def test_shared_instance_across_threads(self, suola):
+        """One instance used from many threads gives the same signatures as one thread.
+
+        Without the lock in WasmRuntime, concurrent calls crash the process inside wasmtime.
+        """
+        urls = [f"https://www.iltalehti.fi/ulkomaat/a/{i:08d}-a494-4474-a234-ddedae3e112b" for i in range(400)]
+        expected = [suola(url) for url in urls]
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(suola, urls * 3))
+
+        assert results == expected * 3
 
 
 if __name__ == "__main__":

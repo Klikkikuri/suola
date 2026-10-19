@@ -26,6 +26,10 @@
 //  6. Note: Do NOT call Free() on the result pointer - the module owns it and retires it later.
 //     Read the result before the next call into the module; it is not kept alive indefinitely.
 //
+// Threading: the module runs on one thread, and a wasmtime Store does not allow concurrent use. A host that
+// shares an instance between threads must serialize steps 1-5, so that no other call enters the module between
+// Malloc and the read of the result.
+//
 // Memory Management:
 //   - Malloc/Free: Used by host to manage input buffers
 //   - stringToPtr: Used internally to return results, stores in memoryArena
@@ -77,15 +81,16 @@ const maxUrlLength = 64 * 1024 // 64KB
 // limits impossible to pass in at all.
 const maxAllocSize = MaxRulesSize
 
-// Memory arena to prevent garbage collection of allocations
-// Using a sync.Map for better concurrent performance
+// Memory arena to prevent garbage collection of allocations.
+// The sync types here do not make concurrent host calls safe: the module is single-threaded, so the host must
+// serialize its calls (see Threading above).
 var memoryArena sync.Map // map[uint32][]byte
 
 // Results are allocated by the module, not by the host, so the host never frees them and the module must
-// retire them itself. A host reads a result before it calls the module again -- that is the documented
-// sequence -- so only the most recent results have to stay alive. Keeping a few gives margin for a host
-// that collects several results before it reads them, and keeps the arena flat instead of growing once
-// per call.
+// retire them itself. A host reads a result before it calls the module again, and it serializes its calls --
+// that is the documented sequence -- so only the most recent results have to stay alive. Keeping a few gives
+// margin for a host that collects several results before it reads them, and keeps the arena flat instead of
+// growing once per call.
 const maxLiveResults = 8
 
 var (
