@@ -138,10 +138,10 @@ class TestRules:
         domain = test_case['domain']
 
         if test_case.get('xfail'):
-            # The wildcard rule resolves an xfail URL. That no named rule matches is checked in main_test.go,
-            # because the signature does not tell which rule made it.
-            result = suola(url)
-            assert len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            # No named rule matches an xfail URL. That the base rules have no catch-all is checked in
+            # main_test.go, because a signature does not tell which rule made it.
+            with pytest.raises(InvalidURLError):
+                suola(url)
             return
 
         if expected_sig:
@@ -223,13 +223,13 @@ class TestEmbeddedRules:
         domain = test_case['domain']
 
         if test_case.get('xfail'):
-            # See test_individual_rule_case: only the wildcard signature can be checked here.
-            result = suola(url)
-            assert len(result) == 64, f"Expected the wildcard rule to sign {domain} URL: {url}"
+            # See test_individual_rule_case: an xfail URL is refused, and no rule signs it.
+            with pytest.raises(InvalidURLError):
+                suola(url)
             return
 
-        # The wildcard rule signs every host. An embedded binary older than rules.yaml fails on the signature
-        # instead of being skipped here, which is what a stale wheel should do.
+        # A host without a named rule is refused. An embedded binary older than rules.yaml fails on the
+        # signature instead of being skipped here, which is what a stale wheel should do.
         result = suola(url)
 
         if expected_sig:

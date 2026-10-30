@@ -160,14 +160,18 @@ def test_import_does_not_create_the_engine():
 
 COLD_START = """
 import sys, threading
-from suola import Suola, _wasm
+from suola import InvalidURLError, Suola, _wasm
 
 errors = []
 
 def create(barrier):
     barrier.wait()
     try:
+        # The base rules name sites only, so this host is refused. That error comes from the engine, which
+        # has then run: this test is about the engine, not about the rule set.
         Suola(wasm_module=sys.argv[1])("https://example.com/a")
+    except InvalidURLError:
+        pass
     except Exception as e:
         errors.append(e)
 

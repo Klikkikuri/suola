@@ -102,7 +102,7 @@ jobs:
             python -m venv /tmp/smoke
             /tmp/smoke/bin/pip install --quiet /dist/suola-*.whl
             cd /tmp
-            /tmp/smoke/bin/python -I -c "import suola; assert len(suola.Suola()(\"https://example.com/a\")) == 64"
+            /tmp/smoke/bin/python -I -c "import suola; assert len(suola.Suola()(\"https://yle.fi/a/74-20194304\")) == 64"
           '
 
       - name: "🔧 Fix artifact and cache permissions"
