@@ -170,6 +170,9 @@ func TestBaseRulesRefuseAHostWithoutANamedRule(t *testing.T) {
 
 func TestCatchAllOverTheBaseRulesSignsAnyHost(t *testing.T) {
 	freshBase(t, string(mustReadConfig(compiledRulesPath)))
+	// The appended rule is package state that outlives a test: put the base rules back even when a check fails.
+	t.Cleanup(func() { freshBase(t, string(mustReadConfig(compiledRulesPath))) })
+
 	named := "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80"
 	before, err := getSignature(named)
 	if err != nil {
@@ -196,9 +199,6 @@ func TestCatchAllOverTheBaseRulesSignsAnyHost(t *testing.T) {
 	if after != before {
 		t.Error("the catch-all changed a signature that a named rule makes")
 	}
-
-	// The appended rule is package state that outlives a test: put the base rules back.
-	freshBase(t, string(mustReadConfig(compiledRulesPath)))
 }
 
 func TestSiteWeightCalculation(t *testing.T) {
