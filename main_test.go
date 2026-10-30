@@ -36,17 +36,14 @@ func TestExtractionRules(t *testing.T) {
 				resUrl, matched, err := matchURL("", test.Url)
 
 				// An xfail case is not a gap in the rules: it says the URL is not an article, so no named
-				// rule may match it. The catch-all resolves it instead, which is what is checked here. A
-				// named rule that starts matching a listing page fails this.
+				// rule may match it. A rule set without a catch-all refuses the URL; a rule set with one
+				// resolves it. Either result passes. A named rule that starts matching a listing page fails.
 				if test.XFail {
-					if err != nil {
-						t.Fatalf("❌ Expected the catch-all to resolve: %s\nError: %v\n\n", test.Url, err)
-					}
-					if matched.Domain != "" {
+					if err == nil && matched != nil && matched.Domain != "" {
 						t.Fatalf("❌ Expected no named rule to match: %s\nMatched domain: %s\nGot: %s\n\n",
 							test.Url, matched.Domain, resUrl)
 					}
-					t.Logf("✅ No named rule matches, the catch-all resolved: %s\n", test.Url)
+					t.Logf("✅ No named rule matches: %s\n", test.Url)
 					return
 				}
 
@@ -144,7 +141,7 @@ func TestWildcardAndDomainMatching(t *testing.T) {
 	}
 }
 
-// The wildcard rule matches every host, so an input with no host must be refused before matching, or it signs.
+// A catch-all rule matches every host, so an input with no host must be refused before matching, or it signs.
 func TestURLWithoutHostIsRefused(t *testing.T) {
 	freshBase(t, `{"sites": [{"domain": "", "templates": [{"template": "{{ .URL }}"}]}]}`)
 
@@ -159,6 +156,49 @@ func TestURLWithoutHostIsRefused(t *testing.T) {
 			t.Errorf("processURL(%q) = %q, expected an error for a URL with no host", inputURL, res)
 		}
 	}
+}
+
+// The base rules name sites only, so a host that no rule names is refused. A provider that must sign any host
+// adds a catch-all of its own; the catch-all is a rule like any other, and it keeps the default rules short.
+func TestBaseRulesRefuseAHostWithoutANamedRule(t *testing.T) {
+	freshBase(t, string(mustReadConfig(compiledRulesPath)))
+
+	if res, err := processURL("https://unknown.example/news/story"); err == nil {
+		t.Fatalf("processURL = %q, expected an error for a host that no rule names", res)
+	}
+}
+
+func TestCatchAllOverTheBaseRulesSignsAnyHost(t *testing.T) {
+	freshBase(t, string(mustReadConfig(compiledRulesPath)))
+	named := "https://www.iltalehti.fi/kotimaa/a/7d3c5ba2-66bd-473e-9c0b-fc3ec26abe80"
+	before, err := getSignature(named)
+	if err != nil {
+		t.Fatalf("getSignature(%q) failed: %v", named, err)
+	}
+
+	catchAll := `{"sites": [{"domain": "", "templates": [{"pattern": "^(?P<Path>/.*?)/*$", "template": "https://{{ .Host }}{{ .Path }}"}]}]}`
+	if err := AppendRules([]byte(catchAll)); err != nil {
+		t.Fatalf("AppendRules failed: %v", err)
+	}
+
+	res, err := processURL("https://unknown.example/news/story/?utm_source=rss")
+	if err != nil {
+		t.Fatalf("processURL failed: %v", err)
+	}
+	if res != "https://unknown.example/news/story" {
+		t.Errorf("Expected the catch-all to drop the query and the trailing slash, got %s", res)
+	}
+
+	after, err := getSignature(named)
+	if err != nil {
+		t.Fatalf("getSignature(%q) failed: %v", named, err)
+	}
+	if after != before {
+		t.Error("the catch-all changed a signature that a named rule makes")
+	}
+
+	// The appended rule is package state that outlives a test: put the base rules back.
+	freshBase(t, string(mustReadConfig(compiledRulesPath)))
 }
 
 func TestSiteWeightCalculation(t *testing.T) {

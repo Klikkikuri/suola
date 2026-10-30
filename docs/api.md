@@ -53,10 +53,14 @@ The module refuses a URL that has no host. A scheme-only form such as `mailto:` 
 host. A relative reference such as `/news/story` also has no host. The caller must make a relative reference
 absolute against its document before the call.
 
-A URL that has a host but no path becomes the root path. Thus `https://example.com` and
-`https://example.com/` are one URL and have one signature.
+The module also refuses a URL that no rule in the rule set matches. The base rules name sites, so a host
+without a named rule is refused. A rule set that the caller supplies can add a `domain: ""` catch-all to
+sign every host.
 
-> **Design.** The wildcard rule matches each host. Without these two tests it also matches each input that
+A URL that has a host but no path becomes the root path. Thus `https://example.com` and
+`https://example.com/` are one URL and match the same rule.
+
+> **Design.** A catch-all rule matches each host. Without these two tests it also matches each input that
 > parses, and all scheme-only forms collapse onto one signature. The module has no document to make a
 > relative reference absolute, but the caller has one.
 

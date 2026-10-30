@@ -21,11 +21,6 @@ const buildDir = path.resolve(process.argv[2] || "build");
 const KNOWN_URL = "https://iltalehti.fi/politiikka/a/2b2ac72b-42df-4d8f-a9ee-7e731216d880";
 const KNOWN_SIGNATURE = "8c892bc5d3b84e788023666f19a4471f423d870e6c29996bfbd13e55abf21e3c";
 
-// The wildcard rule, pinned the same way: every host signs now, so the module returns null only for an
-// input that is not a URL with a host.
-const CATCH_ALL_URL = "https://unknown.example/news/story";
-const CATCH_ALL_SIGNATURE = "8a8eda7ebdf27c81416fd9f9c75412f2407c7a588aae37bce0c7073670047876";
-
 const OWNER = "owner:iltalehti.fi";
 const ownerRules = (tag) => JSON.stringify({
   sites: [{
@@ -34,6 +29,18 @@ const ownerRules = (tag) => JSON.stringify({
       pattern: "^/(?P<Section>[^/]+)/a/(?P<ArticleID>[^/]+)",
       template: `https://www.iltalehti.fi/${tag}/{{ .ArticleID }}`,
     }],
+  }],
+});
+
+// A catch-all is a rule that a caller supplies, not a part of the base rules. This pins the template that keeps
+// the host and the path, so a rule set that adds it signs any host.
+const CATCH_ALL = "owner:any-host";
+const CATCH_ALL_URL = "https://unknown.example/news/story";
+const CATCH_ALL_SIGNATURE = "8a8eda7ebdf27c81416fd9f9c75412f2407c7a588aae37bce0c7073670047876";
+const CATCH_ALL_RULES = JSON.stringify({
+  sites: [{
+    domain: "",
+    templates: [{ pattern: "^(?P<Path>/.*?)/*$", template: "https://{{ .Host }}{{ .Path }}" }],
   }],
 });
 
@@ -106,9 +113,17 @@ WebAssembly.instantiate(fs.readFileSync(path.join(buildDir, "js.wasm")), go.impo
       assert(signature === KNOWN_SIGNATURE, `got ${signature}, expected the same signature as the canonical form`);
     });
 
-    check("signs an unknown host through the wildcard rule", () => {
-      const signature = globalThis.hashUrl(CATCH_ALL_URL);
-      assert(signature === CATCH_ALL_SIGNATURE, `got ${signature}, the rules expect ${CATCH_ALL_SIGNATURE}`);
+    check("returns null for a host that no rule matches", () => {
+      const signature = globalThis.hashUrl("https://unknown.example/news/story");
+      assert(signature === null, `got ${signature}, expected null`);
+    });
+
+    check("signs an unknown host through a catch-all rule set", () => {
+      assert(globalThis.defineRules(CATCH_ALL, CATCH_ALL_RULES) === null, "defineRules reported an error");
+      assert(globalThis.hashUrl(CATCH_ALL_URL) === null, "the base rules signed without a catch-all");
+
+      const signature = globalThis.hashUrl(CATCH_ALL_URL, CATCH_ALL);
+      assert(signature === CATCH_ALL_SIGNATURE, `got ${signature}, the catch-all rule expects ${CATCH_ALL_SIGNATURE}`);
     });
 
     check("returns null for a URL with no host", () => {

@@ -18,16 +18,19 @@ Signatures are generated using SHA-256 hashing. The input URL is normalized acco
 defined in `rules.yaml`, and then the hash is computed. This ensures that the same URL will always
 produce the same signature, regardless of its original format.
 
-**The wildcard rule.** `rules.yaml` ends with a `domain: ""` rule, so every host gets a signature. It
-keeps the host and the path, drops the query and trims trailing slashes: tracking parameters are the
-common case and must not split an article, and an article told apart only by its query is the rare case
-that needs a named rule of its own. A host with a named rule is unaffected — the wildcard rule has
-weight `0` and a named rule has a default weight above `0`, so each named rule is evaluated first, and
-the wildcard rule only catches what falls through. An explicit `weight` is not clamped: a named rule
-with a negative weight is evaluated after the wildcard rule, which catches its URLs first.
+**Named rules only.** `rules.yaml` holds the named rules of the sites that the module signs. A URL that
+no named rule matches is refused, so a site needs a rule of its own.
 
-An input with no host is rejected rather than signed, and a bare host signs as its root. See
-[URLs that the module refuses](docs/api.md#urls-that-the-module-refuses).
+A rule set that a consumer supplies can add a `domain: ""` catch-all. A typical catch-all keeps the
+host and the path, drops the query and trims trailing slashes: tracking parameters are the common case
+and must not split an article, and an article told apart only by its query is the rare case that needs
+a named rule of its own. A named rule still wins against a catch-all — the catch-all has weight `0` and
+a named rule has a default weight above `0`, so each named rule is evaluated first, and the catch-all
+only catches what falls through. An explicit `weight` is not clamped: a named rule with a negative
+weight is evaluated after the catch-all, which catches its URLs first.
+
+An input with no host is rejected rather than signed. A bare host becomes the root path, so a rule must match
+that path to sign it. See [URLs that the module refuses](docs/api.md#urls-that-the-module-refuses).
 
 ### Authoring and compiling rules
 
@@ -103,8 +106,9 @@ sites:
   - `url`: The input URL.
   - `expected`: The normalized URL the rule must produce.
   - `signature`: The SHA-256 hash of `expected`. `sign` is a deprecated alias.
-  - `xfail`: No named rule matches the URL; the wildcard rule resolves it. It marks a URL that is not an
-    article, such as a listing page, and fails if a named rule starts matching it.
+  - `xfail`: No named rule matches the URL. It marks a URL that is not an article, such as a listing
+    page, and fails if a named rule starts matching it. A catch-all in the same rule set may resolve the
+    URL; without one, the module refuses it.
 
 **Implicit Template Fields:**
 All templates are pre-seeded with default fields extracted from the normalized URL:

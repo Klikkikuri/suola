@@ -18,7 +18,7 @@ from suola import InvalidURLError
 from suola.api import Suola
 from suola._wasm import MAX_RULES_SIZE, MAX_URL_LENGTH, WasmRuntime
 
-# The wildcard rule signs any host, so the only rejected input is one with no host: a scheme-only form or
+# A host that no named rule matches is refused, and so is an input with no host: a scheme-only form or
 # a relative reference.
 NO_HOST_URL = "mailto:someone@example.com"
 
@@ -219,10 +219,10 @@ class TestWasmMemorySafety:
         assert len(set(results)) == 1
         assert all(len(r) == 64 for r in results)
 
-    def test_unknown_host_signs_through_wildcard(self, suola):
-        """A host with no named rule is signed by the wildcard rule, not rejected."""
-        result = suola("https://www.example.com/path")
-        assert len(result) == 64, "Expected the wildcard rule to sign an unknown host"
+    def test_unknown_host_is_refused(self, suola):
+        """A host with no named rule is refused, so the module signs only the sites it has rules for."""
+        with pytest.raises(InvalidURLError):
+            suola("https://www.example.com/path")
 
     def test_error_handling_with_memory(self, suola):
         """Test that error messages are properly handled through memory pool."""
